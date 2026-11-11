@@ -1,5 +1,5 @@
 // ======================================================================= EXPORT
-const EX = {bg: "light", scale: 2, title: true, opts: {heading: true, mermaid: true, cabling: true, addressing: true, devices: false}};
+const EX = {bg: "light", scale: 2, title: true, opts: {heading: true, mermaid: true, cabling: true, addressing: true, devices: false, configs: false, tasks: true}};
 function exportSvg() {
   const T = EX.bg === "dark" ? THEMES.dark : EX.bg === "transparent" ? THEMES.white : THEMES.white;
   const b = contentBox(), pad = 34, th = EX.title && S.title ? 44 : 0;
@@ -53,6 +53,11 @@ function noteText() {
   if (o.cabling) parts.push("### Cabling\n" + cablingTable());
   if (o.addressing) parts.push("### Addressing table\n" + addressingTable());
   if (o.devices) parts.push("### Devices\n" + deviceTable());
+  if (o.tasks && S.activity && typeof taskChecklist === "function") parts.push(taskChecklist().trim());
+  if (o.configs) {
+    const ios = S.devices.filter(d => d.cfg);
+    if (ios.length) parts.push("### Configurations\n" + ios.map(d => `> [!example]- ${d.name} running-config\n> \`\`\`\n${runningConfig(d).split("\n").slice(4).map(l => "> " + l).join("\n")}\n> \`\`\``).join("\n\n"));
+  }
   return parts.join("\n\n") + "\n";
 }
 function refreshExport() {

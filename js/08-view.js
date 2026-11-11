@@ -3,8 +3,10 @@ function toWorld(cx, cy) { const r = cv.getBoundingClientRect(); return {x: (cx 
 function fit() {
   const r = cv.getBoundingClientRect(); if (!r.width) return;
   const b = contentBox(), pad = 46, top = 44, bottom = 50;
-  const k = Math.max(.2, Math.min(1.5, Math.min((r.width - pad * 2) / b.w, (r.height - top - bottom - pad) / b.h)));
-  VIEW.k = k; VIEW.x = (r.width - b.w * k) / 2 - b.x * k; VIEW.y = top + (r.height - top - bottom - b.h * k) / 2 - b.y * k;
+  // leave room for the activity panel when it is open
+  const rp = document.querySelector(".actpanel:not(.hidden):not(.min)") && r.width > 900 ? 352 : 0, W = r.width - rp;
+  const k = Math.max(.2, Math.min(1.5, Math.min((W - pad * 2) / b.w, (r.height - top - bottom - pad) / b.h)));
+  VIEW.k = k; VIEW.x = (W - b.w * k) / 2 - b.x * k; VIEW.y = top + (r.height - top - bottom - b.h * k) / 2 - b.y * k;
   applyView();
 }
 function zoomBy(f, cx, cy) {

@@ -171,14 +171,14 @@ function remoteLogin(T, fromDev, ip, proto, user) {
     const ask = () => {
       s.pending = {prompt: "Password: ", secret: true, fn: pw => {
         const u = dev.cfg.users[user];
-        if (u && pwCheck(u.secret || u.password, pw)) { if (dev.cfg.banner) T.print(dev.cfg.banner + "\n"); s.authed = true; s.mode = u.priv === 15 ? "priv" : "user"; T.refresh(); return; }
+        if (u && pwCheck(u.secret || u.password, pw)) { if (typeof actLog === "function") actLog("ssh", fromDev, dev); if (dev.cfg.banner) T.print(dev.cfg.banner + "\n"); s.authed = true; s.mode = u.priv === 15 ? "priv" : "user"; T.refresh(); return; }
         if (++tries >= 3) { T.print("% Login invalid\n"); endSession(s); return; }
         T.print("% Login invalid\n"); ask(); T.refresh();
       }};
     };
     ask(); T.refresh(); return s;
   }
-  const s = startIOS(T, dev, "telnet");
+  const s = startIOS(T, dev, "telnet", () => { if (typeof actLog === "function") actLog("telnet", fromDev, dev); });
   if (s) s.remoteAddr = ip;
   return s;
 }

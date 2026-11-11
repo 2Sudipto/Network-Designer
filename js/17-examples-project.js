@@ -41,14 +41,14 @@ function exampleWan() {
   L(sny, "Fa0/1", D("PC-NY", "pc", "10.1.1.10/24", "New York"), "Fa0", "copper"); L(snj, "Fa0/1", D("PC-NJ", "pc", "10.2.2.10/24", "New Jersey"), "Fa0", "copper");
   return s;
 }
-function loadProject(s, msg) { commit(); const style = S.iconStyle; S = Object.assign(blank(), s); if (typeof initAll === "function") initAll(); S.iconStyle = style || "cisco"; fixUid(); SEL = {kind: null, id: null}; CONNECT.from = null; arrange(S.dir || "LR", true); inspector(); if (typeof autoDhcp === "function") autoDhcp(); if (msg) toast(msg); }
+function loadProject(s, msg) { commit(); const style = S.iconStyle; S = Object.assign(blank(), s); if (typeof initAll === "function") initAll(); S.iconStyle = style || "cisco"; fixUid(); SEL = {kind: null, id: null}; CONNECT.from = null; arrange(S.dir || "LR", true); inspector(); if (typeof autoDhcp === "function") autoDhcp(); if (typeof renderActPanel === "function") renderActPanel(); if (msg) toast(msg); }
 function closeMenus() { document.querySelectorAll("details.menu[open]").forEach(d => d.removeAttribute("open")); }
 document.addEventListener("click", e => { if (!e.target.closest("details.menu")) closeMenus(); });
 $("exLab").onclick = () => { closeMenus(); loadProject(exampleLab(), "Loaded Kalloo Lab 01"); };
 $("exLan").onclick = () => { closeMenus(); loadProject(exampleLan(), "Loaded small LAN"); };
 $("exCo").onclick = () => { closeMenus(); loadProject(exampleCompany(), "Loaded small company"); };
 $("exWan").onclick = () => { closeMenus(); loadProject(exampleWan(), "Loaded two-site WAN"); };
-$("newDiag").onclick = () => { closeMenus(); commit(); S = Object.assign(blank(), {dir: S.dir, iconStyle: S.iconStyle}); select(null, null); save(); fit(); toast("New diagram. Undo (Ctrl+Z) brings the old one back."); };
+$("newDiag").onclick = () => { closeMenus(); commit(); S = Object.assign(blank(), {dir: S.dir, iconStyle: S.iconStyle}); select(null, null); save(); fit(); if (typeof renderActPanel === "function") renderActPanel(); toast("New diagram. Undo (Ctrl+Z) brings the old one back."); };
 $("saveJson").onclick = () => { closeMenus(); download(fileBase() + ".json", new Blob([JSON.stringify(S, null, 2)], {type: "application/json"})); };
 $("openJson").onclick = () => { closeMenus(); $("file").click(); };
 $("file").onchange = e => {

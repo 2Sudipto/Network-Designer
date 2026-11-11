@@ -33,7 +33,7 @@ function defaultSvc() {
 }
 function initDevice(d) {
   if (isIOS(d)) {
-    if (!d.cfg) { d.cfg = defaultCfg(d); d.cfg.hostname = d.name.replace(/\s+/g, "-"); }
+    if (!d.cfg) d.cfg = defaultCfg(d);   // boots as "Router" / "Switch", like real IOS
     // ports added by a model change get defaults
     const def = defaultCfg(d);
     for (const p in def.ifaces) if (!d.cfg.ifaces[p]) d.cfg.ifaces[p] = def.ifaces[p];

@@ -9,7 +9,12 @@ const byId = id => S.devices.find(d => d.id === id);
 const byLink = id => S.links.find(l => l.id === id);
 const byNote = id => (S.notes || []).find(n => n.id === id);
 const byArea = id => (S.areas || []).find(a => a.id === id);
-const ipLines = d => String(d.ip || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+// label lines under a device: the IP notes you typed, or else the addresses from its configuration
+const ipLines = d => {
+  const notes = String(d.ip || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (notes.length || typeof configuredAddrs !== "function" || (!d.cfg && !d.host)) return notes;
+  return configuredAddrs(d).map(a => `${HOST_TYPES.includes(d.type) ? "" : a.iface + " "}${a.ip}/${maskToLen(a.mask)}`);
+};
 const icon = type => (S.iconStyle === "realistic" ? ICON_REAL : ICON_CISCO)[type] || ICON_REAL[type] || ICON_REAL.pc;
 const iconSvg = type => `<svg viewBox="-34 -27 68 54" aria-hidden="true">${icon(type)}</svg>`;
 let SEL = {kind: null, id: null}, MODE = "select", VIEW = {x: 0, y: 0, k: 1}, TH = THEMES.light, EDITKEY = null;

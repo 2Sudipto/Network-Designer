@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Network Simulator</title>
 <meta name="description" content="A Packet Tracer-style network simulator for CCNA practice: build topologies, configure devices with an IOS-like CLI, ping, and export to Obsidian.">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=1094f4e1">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="sharedDefs"></defs></svg>
@@ -34,10 +34,14 @@
     <details class="menu" id="menuProject">
       <summary class="btn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Project</summary>
       <div class="dd">
-        <button id="exLab"><span>🦷</span><span>Example: Kalloo Lab 01<small>Edison Smiles Dental</small></span></button>
-        <button id="exLan"><span>🏠</span><span>Example: small LAN<small>Router, switch, 3 PCs</small></span></button>
-        <button id="exCo"><span>🏢</span><span>Example: small company<small>Internet, firewall, core switch, Wi-Fi, servers</small></span></button>
-        <button id="exWan"><span>🌐</span><span>Example: two sites over a WAN<small>Serial link, OSPF-style lab</small></span></button>
+        <button id="openActs"><span>🎯</span><span>Activities &amp; labs…<small>Auto-checked tasks: Kalloo Lab 01, VLANs, ROAS, WAN, DHCP, SSH</small></span></button>
+        <button id="exBreak"><span>🧨</span><span>Break it! (troubleshooting)<small>3 random faults in a working network</small></span></button>
+        <button id="exLab"><span>🦷</span><span>Kalloo Lab 01<small>Edison Smiles Dental, with live task checks</small></span></button>
+        <hr>
+        <button id="exCampus"><span>🏫</span><span>Working: campus + WAN<small>VLANs, router-on-a-stick, DHCP, DNS, web, serial</small></span></button>
+        <button id="exLan"><span>🏠</span><span>Working: small LAN<small>Router, switch, 3 PCs, configured</small></span></button>
+        <button id="exWan"><span>🌐</span><span>Working: two sites over a WAN<small>Serial link + static routes</small></span></button>
+        <button id="exCo"><span>🏢</span><span>Diagram only: small company<small>Internet, firewall, core switch, Wi-Fi, servers</small></span></button>
         <hr>
         <button id="saveJson"><span>💾</span><span>Save project file<small>.json you can open again later</small></span></button>
         <button id="openJson"><span>📂</span><span>Open project file</span></button>
@@ -152,8 +156,10 @@
         <label class="chk"><input type="checkbox" data-o="heading" checked><span><b>"## Topology" heading</b></span></label>
         <label class="chk"><input type="checkbox" data-o="mermaid" checked><span><b>Diagram as Mermaid code</b><small>Draws in Obsidian with emoji icons. For the real device pictures, also paste the picture.</small></span></label>
         <label class="chk"><input type="checkbox" data-o="cabling" checked><span><b>Cabling table</b><small>From · Port · To · Port · Cable</small></span></label>
-        <label class="chk"><input type="checkbox" data-o="addressing" checked><span><b>Addressing table</b><small>Built from each device's IP lines (e.g. "G0/0 192.168.1.1/24")</small></span></label>
+        <label class="chk"><input type="checkbox" data-o="addressing" checked><span><b>Addressing table</b><small>From the device configs (or the IP notes you typed)</small></span></label>
         <label class="chk"><input type="checkbox" data-o="devices"><span><b>Device list</b><small>Name · Type · Model · Group</small></span></label>
+        <label class="chk"><input type="checkbox" data-o="configs"><span><b>Running-configs</b><small>Each router/switch config in a collapsible callout</small></span></label>
+        <label class="chk"><input type="checkbox" data-o="tasks" checked><span><b>Task checklist</b><small>When an activity is open: tasks as - [x] checkboxes</small></span></label>
         <textarea id="exText" readonly aria-label="Text that will be copied"></textarea>
         <div class="row">
           <button class="btn primary big" id="exCopyText">📋 Copy for Obsidian</button>
@@ -165,34 +171,35 @@
 </dialog>
 
 <!-- scripts:start -->
-<script src="js/00-head.js"></script>
-<script src="js/01-artwork.js"></script>
-<script src="js/02-devices-models.js"></script>
-<script src="js/03-state.js"></script>
-<script src="js/04-history-save.js"></script>
-<script src="js/05-theme.js"></script>
-<script src="js/06-geometry.js"></script>
-<script src="js/07-drawing.js"></script>
-<script src="js/08-view.js"></script>
-<script src="js/09-ports-cables.js"></script>
-<script src="js/10-actions.js"></script>
-<script src="js/11-auto-layout.js"></script>
-<script src="js/12-pointer-keyboard-context-menu.js"></script>
-<script src="js/13-palette.js"></script>
-<script src="js/14-inspector.js"></script>
-<script src="js/15-text-outputs.js"></script>
-<script src="js/16-export.js"></script>
-<script src="js/17-examples-project.js"></script>
-<script src="js/18-toolbar.js"></script>
-<script src="js/20-netutil.js"></script>
-<script src="js/21-config.js"></script>
-<script src="js/22-cli-core.js"></script>
-<script src="js/23-cli-commands.js"></script>
-<script src="js/24-engine.js"></script>
-<script src="js/25-devwin.js"></script>
-<script src="js/26-desktop.js"></script>
-<script src="js/27-sim.js"></script>
-<script src="js/99-start.js"></script>
+<script src="js/00-head.js?v=db03914e"></script>
+<script src="js/01-artwork.js?v=66acf6d9"></script>
+<script src="js/02-devices-models.js?v=1acb7346"></script>
+<script src="js/03-state.js?v=06877ef1"></script>
+<script src="js/04-history-save.js?v=bdccfe19"></script>
+<script src="js/05-theme.js?v=e3414ea0"></script>
+<script src="js/06-geometry.js?v=1248410e"></script>
+<script src="js/07-drawing.js?v=fed6209f"></script>
+<script src="js/08-view.js?v=17a4e916"></script>
+<script src="js/09-ports-cables.js?v=61b6f8da"></script>
+<script src="js/10-actions.js?v=cb78a2ef"></script>
+<script src="js/11-auto-layout.js?v=2fda9f50"></script>
+<script src="js/12-pointer-keyboard-context-menu.js?v=5bc3e6e9"></script>
+<script src="js/13-palette.js?v=bbf0137b"></script>
+<script src="js/14-inspector.js?v=5bfa297e"></script>
+<script src="js/15-text-outputs.js?v=3c319d17"></script>
+<script src="js/16-export.js?v=ae39fd0b"></script>
+<script src="js/17-examples-project.js?v=658e3745"></script>
+<script src="js/18-toolbar.js?v=a85d4d1e"></script>
+<script src="js/20-netutil.js?v=f0c63ee6"></script>
+<script src="js/21-config.js?v=23af5b0f"></script>
+<script src="js/22-cli-core.js?v=31b50dc1"></script>
+<script src="js/23-cli-commands.js?v=25182d66"></script>
+<script src="js/24-engine.js?v=b4a546ba"></script>
+<script src="js/25-devwin.js?v=c1156955"></script>
+<script src="js/26-desktop.js?v=888d8fd1"></script>
+<script src="js/27-sim.js?v=059da2dd"></script>
+<script src="js/28-activities.js?v=7aac4c97"></script>
+<script src="js/99-start.js?v=4c34471f"></script>
 <!-- scripts:end -->
 </body>
 </html>

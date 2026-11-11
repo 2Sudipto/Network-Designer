@@ -115,7 +115,6 @@ function duplicateSel() {
   commit();
   const d = JSON.parse(JSON.stringify(s));
   Object.assign(d, {id: nid("d"), name: nextName(TYPES[s.type].prefix), x: s.x + 40, y: s.y + 40});
-  if (d.cfg) d.cfg.hostname = d.name;
   S.devices.push(d); select("dev", d.id); save();
 }
 

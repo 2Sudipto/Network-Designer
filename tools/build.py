@@ -7,6 +7,7 @@ index.html loads css/ and js/ directly (works on GitHub Pages and when double-cl
 dist/network-simulator.html is one self-contained file (CSS + JS inlined) for offline use / Obsidian.
 """
 import glob
+import hashlib
 import io
 import os
 import re
@@ -31,15 +32,19 @@ def main():
     # 1) keep index.html's <script> list in sync with the files in js/
     index_path = os.path.join(ROOT, "index.html")
     index = read(index_path)
-    tags = "\n".join(f'<script src="js/{name}"></script>' for name in scripts)
+    # ?v=<hash> makes browsers (and GitHub Pages visitors) fetch changed files instead of stale cached copies
+    ver = lambda rel: hashlib.sha1(open(os.path.join(ROOT, rel), "rb").read()).hexdigest()[:8]
+    tags = "\n".join(f'<script src="js/{name}?v={ver("js/" + name)}"></script>' for name in scripts)
     index = re.sub(r"<!-- scripts:start -->.*?<!-- scripts:end -->",
-                   "<!-- scripts:start -->\n" + tags + "\n<!-- scripts:end -->", index, flags=re.S)
+                   lambda m: "<!-- scripts:start -->\n" + tags + "\n<!-- scripts:end -->", index, flags=re.S)
+    css_link = re.compile(r'<link rel="stylesheet" href="css/style\.css(\?v=\w+)?">')
+    index = css_link.sub(lambda m: f'<link rel="stylesheet" href="css/style.css?v={ver("css/style.css")}">', index)
     write(index_path, index)
 
     # 2) single-file build: inline the stylesheet and every script
     css = read(os.path.join(ROOT, "css", "style.css"))
     js = "\n".join(read(os.path.join(ROOT, "js", n)) for n in scripts)
-    single = index.replace('<link rel="stylesheet" href="css/style.css">', "<style>\n" + css + "\n</style>")
+    single = css_link.sub(lambda m: "<style>\n" + css + "\n</style>", index)
     single = re.sub(r"<!-- scripts:start -->.*?<!-- scripts:end -->",
                     lambda m: "<script>\n" + js.replace("</script", "<\\/script") + "\n</script>", single, flags=re.S)
     out = os.path.join(ROOT, "dist", "network-simulator.html")
