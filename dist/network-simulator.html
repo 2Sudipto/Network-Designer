@@ -193,6 +193,20 @@ dialog.exp::backdrop{background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
 #cv.tool-inspect [data-dev]{cursor:help}
 #cv.tool-pdu,#cv.tool-pdu [data-dev]{cursor:copy}
 @media (max-width:1100px){.dock{grid-template-columns:1fr}.dcats,.drt{border:none}.layout{grid-template-rows:auto auto}}
+.portpick .pdot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--ok)}
+.portpick .pdot.used{background:var(--muted)}
+.portpick small{margin-left:auto;color:var(--muted);font-size:11px}
+.warn{color:#d97706;font-weight:700}
+.inspop{min-width:300px;max-width:440px}
+.inspop .popb{max-height:380px;overflow:auto;padding:4px 6px 6px}
+.inspop h5{margin:10px 2px 4px;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.swatches{display:flex;gap:6px;flex-wrap:wrap}
+.swatches .sw{width:24px;height:24px;border-radius:7px;border:2px solid transparent;cursor:pointer}
+.swatches .sw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--panel) inset}
+.ic.note{font-size:24px;display:grid;place-items:center}
+.mini{border:1px solid var(--border);background:var(--panel2);border-radius:6px;padding:1px 6px;cursor:pointer;font-size:11px;color:var(--text)}
+.mini:hover{border-color:var(--accent);color:var(--accent)}
+#cv.tool-delete [data-note],#cv.tool-delete [data-area]{cursor:not-allowed}
 
 </style>
 </head>
@@ -246,7 +260,7 @@ dialog.exp::backdrop{background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
       <defs><pattern id="gridPat" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" style="fill:var(--grid)"/></pattern></defs>
       <g id="world">
         <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#gridPat)"/>
-        <g id="gGroups"></g><g id="gLinks"></g><g id="gDevs"></g><g id="gOverlay"></g>
+        <g id="gAreas"></g><g id="gGroups"></g><g id="gLinks"></g><g id="gDevs"></g><g id="gNotes"></g><g id="gPkts"></g><g id="gOverlay"></g>
       </g>
     </svg>
     <div class="legend" id="legend"></div>
@@ -531,15 +545,32 @@ const MODELS = {
 const ALLMODELS = Object.entries(MODELS).flatMap(([t, series]) => series.flatMap(([s, ms]) => ms.map(m => Object.assign({type: t, series: s}, m))));
 const findModel = (type, name) => ALLMODELS.find(m => m.type === type && m.name === name);
 const PALETTE = [["Network", ["router", "switch", "l3switch", "firewall", "cloud", "hub"]], ["Wireless", ["ap", "wlc"]], ["End devices", ["pc", "laptop", "server", "printer", "phone", "tablet"]]];
+// Bottom dock categories, like Packet Tracer's device-type selection box
+const DOCK_CATS = [
+  {k: "routers",  label: "Routers",     icon: "router",   types: ["router"]},
+  {k: "switches", label: "Switches",    icon: "switch",   types: ["switch", "l3switch"]},
+  {k: "hubs",     label: "Hubs",        icon: "hub",      types: ["hub"]},
+  {k: "wireless", label: "Wireless",    icon: "ap",       types: ["ap", "wlc"]},
+  {k: "security", label: "Security",    icon: "firewall", types: ["firewall"]},
+  {k: "wan",      label: "WAN / Cloud", icon: "cloud",    types: ["cloud"]},
+  {k: "end",      label: "End Devices", icon: "pc",       types: ["pc", "laptop", "server", "printer", "phone", "tablet"]},
+  {k: "conn",     label: "Connections", icon: "cable",    cables: true},
+];
+// Cable types (Packet Tracer's Connections set). kinds = port kinds the cable can plug into.
 const CABLES = {
-  copper:    {label: "Copper straight-through", color: "#7d8796", w: 2,   dash: "",         lights: true},
-  crossover: {label: "Copper crossover",        color: "#2f7fe0", w: 2,   dash: "7 5",      lights: true},
-  fiber:     {label: "Fiber",                   color: "#f08a24", w: 2.6, dash: "",         lights: true},
-  trunk:     {label: "Trunk / EtherChannel",    color: "#8b46c9", w: 4.5, dash: "",         lights: true},
-  serial:    {label: "Serial (WAN)",            color: "#d6362b", w: 2.4, dash: "",         lights: true, zig: true},
-  wireless:  {label: "Wireless",                color: "#18a37f", w: 2,   dash: "2 6",      lights: false},
-  console:   {label: "Console (rollover)",      color: "#3aa7d6", w: 2,   dash: "10 4 2 4", lights: false},
+  auto:      {label: "Automatically Choose Connection Type", short: "Automatic", virtual: true},
+  console:   {label: "Console (rollover)",      short: "Console",     color: "#3aa7d6", w: 2,   dash: "10 4 2 4", lights: false, kinds: ["console", "rs232"]},
+  copper:    {label: "Copper Straight-Through", short: "Straight",    color: "#7d8796", w: 2,   dash: "",         lights: true,  kinds: ["eth"]},
+  crossover: {label: "Copper Cross-Over",       short: "Cross-Over",  color: "#7d8796", w: 2,   dash: "7 5",      lights: true,  kinds: ["eth"]},
+  fiber:     {label: "Fiber",                   short: "Fiber",       color: "#f08a24", w: 2.6, dash: "",         lights: true,  kinds: ["eth"]},
+  serialDCE: {label: "Serial DCE",              short: "Serial DCE",  color: "#d6362b", w: 2.4, dash: "",         lights: true,  kinds: ["serial"], zig: true, dce: true},
+  serialDTE: {label: "Serial DTE",              short: "Serial DTE",  color: "#d6362b", w: 2.4, dash: "",         lights: true,  kinds: ["serial"], zig: true},
+  wireless:  {label: "Wireless association",    short: "Wireless",    color: "#18a37f", w: 2,   dash: "2 6",      lights: false, kinds: ["wireless"]},
+  // legacy types from older projects (still drawn, not offered in the dock)
+  serial:    {label: "Serial (WAN)",            short: "Serial",      color: "#d6362b", w: 2.4, dash: "",         lights: true,  kinds: ["serial"], zig: true, legacy: true},
+  trunk:     {label: "Trunk (old projects)",    short: "Trunk",       color: "#8b46c9", w: 4.5, dash: "",         lights: true,  kinds: ["eth"], legacy: true},
 };
+const CABLE_LIST = Object.entries(CABLES).filter(([, c]) => !c.virtual && !c.legacy);
 const EMOJI = {router:"🔀",switch:"🔲",l3switch:"🔳",hub:"⬛",firewall:"🧱",cloud:"☁️",ap:"📶",wlc:"📡",pc:"💻",laptop:"💻",server:"🖥️",printer:"🖨️",phone:"☎️",tablet:"📱"};
 const MSHAPE = {router:["((", "))"], server:["[(", ")]"], cloud:["{{", "}}"], firewall:["[[", "]]"], ap:["([", "])"]};
 const GROUP_COLORS = ["#0a84ff", "#16a34a", "#d97706", "#9333ea", "#dc2626", "#0891b2"];
@@ -553,26 +584,31 @@ $("sharedDefs").innerHTML = DEFS;
 
 // ======================================================================= STATE
 const KEY = "ndb.v2";
-const blank = () => ({v: 3, title: "", dir: "LR", iconStyle: "cisco", showModel: true, showIP: true, showPorts: true, showLights: true, snap: true, devices: [], links: []});
+const blank = () => ({v: 3, title: "", dir: "LR", iconStyle: "cisco", showModel: true, showIP: true, showPorts: true, showLights: true, snap: true, devices: [], links: [], notes: [], areas: []});
 let S = blank();
 let uid = 1;
 const nid = p => p + (uid++);
-function fixUid() { for (const o of [...S.devices, ...S.links]) { const n = parseInt(String(o.id).replace(/\D/g, ""), 10); if (n >= uid) uid = n + 1; } }
+function fixUid() { for (const o of [...S.devices, ...S.links, ...(S.notes || []), ...(S.areas || [])]) { const n = parseInt(String(o.id).replace(/\D/g, ""), 10); if (n >= uid) uid = n + 1; } }
 const byId = id => S.devices.find(d => d.id === id);
 const byLink = id => S.links.find(l => l.id === id);
+const byNote = id => (S.notes || []).find(n => n.id === id);
+const byArea = id => (S.areas || []).find(a => a.id === id);
 const ipLines = d => String(d.ip || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
 const icon = type => (S.iconStyle === "realistic" ? ICON_REAL : ICON_CISCO)[type] || ICON_REAL[type] || ICON_REAL.pc;
 const iconSvg = type => `<svg viewBox="-34 -27 68 54" aria-hidden="true">${icon(type)}</svg>`;
 let SEL = {kind: null, id: null}, MODE = "select", VIEW = {x: 0, y: 0, k: 1}, TH = THEMES.light, EDITKEY = null;
-const CONNECT = {from: null};
+const CONNECT = {from: null, port: null};
+let CABLE = "auto";   // cable picked in the Connections dock
+const PDU_PICK = {from: null}; // Add Simple PDU tool: source picked so far
+let AREA_DRAW = null; // area being drawn with the Area tool
 const cv = $("cv");
 
 
 // ======================================================================= HISTORY / SAVE
 const H = {past: [], future: []};
-const snap = () => JSON.stringify({devices: S.devices, links: S.links, title: S.title});
+const snap = () => JSON.stringify({devices: S.devices, links: S.links, title: S.title, notes: S.notes || [], areas: S.areas || []});
 function commit() { H.past.push(snap()); if (H.past.length > 150) H.past.shift(); H.future = []; updateUndo(); }
-function restore(json) { const v = JSON.parse(json); S.devices = v.devices; S.links = v.links; S.title = v.title || ""; if ((SEL.kind === "dev" && !byId(SEL.id)) || (SEL.kind === "link" && !byLink(SEL.id))) SEL = {kind: null, id: null}; render(); inspector(); save(); }
+function restore(json) { const v = JSON.parse(json); S.devices = v.devices; S.links = v.links; S.title = v.title || ""; S.notes = v.notes || []; S.areas = v.areas || []; if ((SEL.kind === "dev" && !byId(SEL.id)) || (SEL.kind === "link" && !byLink(SEL.id)) || (SEL.kind === "note" && !byNote(SEL.id)) || (SEL.kind === "area" && !byArea(SEL.id))) SEL = {kind: null, id: null}; render(); inspector(); save(); }
 function undo() { if (!H.past.length) return; H.future.push(snap()); restore(H.past.pop()); updateUndo(); }
 function redo() { if (!H.future.length) return; H.past.push(snap()); restore(H.future.pop()); updateUndo(); }
 function updateUndo() { $("undo").disabled = !H.past.length; $("redo").disabled = !H.future.length; }
@@ -604,8 +640,10 @@ function groupRects() {
   });
 }
 function contentBox() {
-  if (!S.devices.length) return {x: -300, y: -200, w: 600, h: 400};
+  if (!S.devices.length && !(S.areas || []).length && !(S.notes || []).length) return {x: -300, y: -200, w: 600, h: 400};
   let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const a of S.areas || []) { x1 = Math.min(x1, a.x); y1 = Math.min(y1, a.y); x2 = Math.max(x2, a.x + a.w); y2 = Math.max(y2, a.y + a.h); }
+  for (const n of S.notes || []) { const b = noteBox(n); x1 = Math.min(x1, n.x); y1 = Math.min(y1, n.y); x2 = Math.max(x2, n.x + b.w); y2 = Math.max(y2, n.y + b.h); }
   for (const d of S.devices) { const hw = Math.max(40, textW(d) / 2 + 6); x1 = Math.min(x1, d.x - hw); x2 = Math.max(x2, d.x + hw); y1 = Math.min(y1, d.y - 32); y2 = Math.max(y2, d.y + labelH(d) + 6); }
   for (const g of groupRects()) { x1 = Math.min(x1, g.x); y1 = Math.min(y1, g.y); x2 = Math.max(x2, g.x + g.w); y2 = Math.max(y2, g.y + g.h); }
   return {x: x1, y: y1, w: x2 - x1, h: y2 - y1};
@@ -613,20 +651,35 @@ function contentBox() {
 
 
 // ======================================================================= DRAWING
+// Packet Tracer-style link light: a small triangle pointing along the cable
+function lightSvg(x, y, ux, uy, state) {
+  const [fill, stroke] = LIGHT[state] || LIGHT.up, nx = -uy, ny = ux;
+  const pts = [[x + ux * 5.5, y + uy * 5.5], [x - ux * 4 + nx * 4.6, y - uy * 4 + ny * 4.6], [x - ux * 4 - nx * 4.6, y - uy * 4 - ny * 4.6]];
+  return `<polygon points="${pts.map(p => p.map(f2).join(",")).join(" ")}" fill="${fill}" stroke="${stroke}" stroke-width="1" stroke-linejoin="round"/>`;
+}
 function linkSvg(l, exp, T) {
-  const a = byId(l.a), b = byId(l.b);
-  if (!a || !b) return "";
+  const A = byId(l.a), B = byId(l.b);
+  if (!A || !B) return "";
   const c = CABLES[l.cable] || CABLES.copper;
+  // fan out parallel cables between the same two devices
+  const sib = S.links.filter(x => (x.a === l.a && x.b === l.b) || (x.a === l.b && x.b === l.a));
+  let a = A, b = B;
+  if (sib.length > 1) {
+    const [p, q] = A.id < B.id ? [A, B] : [B, A], L0 = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    const off = (sib.indexOf(l) - (sib.length - 1) / 2) * 18, ox = -(q.y - p.y) / L0 * off, oy = (q.x - p.x) / L0 * off;
+    a = Object.assign({}, A, {x: A.x + ox, y: A.y + oy}); b = Object.assign({}, B, {x: B.x + ox, y: B.y + oy});
+  }
   const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
   let d;
   if (c.zig && len > 90) {
     const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    d = `M${a.x},${a.y} L${mx - 10 * ux},${my - 10 * uy} L${mx - 3 * ux + 9 * nx},${my - 3 * uy + 9 * ny} L${mx + 3 * ux - 9 * nx},${my + 3 * uy - 9 * ny} L${mx + 10 * ux},${my + 10 * uy} L${b.x},${b.y}`;
+    d = `M${a.x},${a.y} L${f2(mx - 10 * ux)},${f2(my - 10 * uy)} L${f2(mx - 3 * ux + 9 * nx)},${f2(my - 3 * uy + 9 * ny)} L${f2(mx + 3 * ux - 9 * nx)},${f2(my + 3 * uy - 9 * ny)} L${f2(mx + 10 * ux)},${f2(my + 10 * uy)} L${b.x},${b.y}`;
   } else d = `M${a.x},${a.y} L${b.x},${b.y}`;
   const sel = !exp && SEL.kind === "link" && SEL.id === l.id;
+  const st = linkStatus(l);
   let s = `<g data-link="${esc(l.id)}">`;
   if (sel) s += `<path d="${d}" fill="none" stroke="${T.accent}" stroke-opacity=".3" stroke-width="${c.w + 10}" stroke-linecap="round" stroke-linejoin="round"/>`;
-  s += `<path d="${d}" fill="none" stroke="${c.color}" stroke-width="${c.w}"${c.dash ? ` stroke-dasharray="${c.dash}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`;
+  s += `<path d="${d}" fill="none" stroke="${c.color}" stroke-width="${c.w}"${c.dash ? ` stroke-dasharray="${c.dash}"` : ""} stroke-linecap="round" stroke-linejoin="round"${st.up ? "" : ' stroke-opacity=".65"'}/>`;
   if (!exp) s += `<path d="${d}" fill="none" stroke="#000" stroke-opacity="0" stroke-width="16"/>`;
   const exitT = (dev, vx, vy) => {
     const hw = Math.max(34, textW(dev) / 2 + 4), top = 28, bottom = labelH(dev) + 2;
@@ -635,10 +688,14 @@ function linkSvg(l, exp, T) {
     return Math.min(tx, ty);
   };
   const ea = exitT(a, ux, uy), eb = exitT(b, -ux, -uy);
-  if (S.showLights && c.lights && len > 100) {
-    const dot = (x, y) => `<circle cx="${f2(x)}" cy="${f2(y)}" r="4.3" fill="#22c55e" stroke="#0f6b31" stroke-width="1"/>`;
+  if (S.showLights && c.lights && len > 100 && st.a) {
     const ra = Math.min(ea + 6, len / 2 - 6), rb = Math.min(eb + 6, len / 2 - 6);
-    s += dot(a.x + ux * ra, a.y + uy * ra) + dot(b.x - ux * rb, b.y - uy * rb);
+    s += lightSvg(a.x + ux * ra, a.y + uy * ra, ux, uy, st.a) + lightSvg(b.x - ux * rb, b.y - uy * rb, -ux, -uy, st.b);
+  }
+  if (c.dce && len > 140) {
+    // clock symbol on the DCE end, like Packet Tracer
+    const r = Math.min(ea + 24, len / 2 - 14), cx = a.x + ux * r + nx * 12, cy = a.y + uy * r + ny * 12;
+    s += `<g transform="translate(${f2(cx)},${f2(cy)})"><circle r="6.5" fill="#fff" stroke="${c.color}" stroke-width="1.6"/><path d="M0,-3.8 V0 L2.8,1.6" stroke="${c.color}" stroke-width="1.4" fill="none" stroke-linecap="round"/></g>`;
   }
   if (S.showPorts) {
     const horiz = Math.abs(ux) > Math.abs(uy), off = horiz ? -9 : 0, side = horiz ? 0 : 9;
@@ -665,30 +722,59 @@ function devSvg(d, exp, T) {
 function groupsSvg() {
   return groupRects().map(g => `<g><rect x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="16" fill="${g.color}" fill-opacity=".07" stroke="${g.color}" stroke-opacity=".75" stroke-width="1.4" stroke-dasharray="7 5"/><text x="${g.x + 14}" y="${g.y + 20}" font-size="12.5" font-weight="700" fill="${g.color}">${esc(g.name)}</text></g>`).join("");
 }
+// ---- areas (boxes you draw) and notes (text labels)
+const AREA_COLORS = ["#0a84ff", "#16a34a", "#d97706", "#9333ea", "#dc2626", "#0891b2", "#64748b"];
+function areasSvg(exp, T) {
+  return (S.areas || []).map(a => {
+    const sel = !exp && SEL.kind === "area" && SEL.id === a.id;
+    let s = `<g data-area="${esc(a.id)}"><rect x="${a.x}" y="${a.y}" width="${a.w}" height="${a.h}" rx="14" fill="${a.color}" fill-opacity=".09" stroke="${a.color}" stroke-width="${sel ? 2.6 : 1.6}"${sel ? ' stroke-dasharray="7 4"' : ""}/>`;
+    if (a.label) s += `<text x="${a.x + 14}" y="${a.y + 22}" font-size="13" font-weight="700" fill="${a.color}">${esc(a.label)}</text>`;
+    if (sel) s += `<rect data-areah="${esc(a.id)}" x="${a.x + a.w - 8}" y="${a.y + a.h - 8}" width="14" height="14" rx="3" fill="${a.color}" style="cursor:nwse-resize"/>`;
+    return s + "</g>";
+  }).join("");
+}
+function noteBox(n) { const lines = String(n.text || "").split("\n"); return {lines, w: Math.max(70, ...lines.map(l => l.length * 7.1)) + 22, h: lines.length * 17 + 14}; }
+function notesSvg(exp, T) {
+  return (S.notes || []).map(n => {
+    const sel = !exp && SEL.kind === "note" && SEL.id === n.id, {lines, w, h} = noteBox(n);
+    return `<g data-note="${esc(n.id)}" transform="translate(${n.x},${n.y})"><rect width="${f2(w)}" height="${h}" rx="6" fill="#fff6bf" stroke="${sel ? T.accent : "#d9b93a"}" stroke-width="${sel ? 2 : 1}"/>` +
+      lines.map((l, i) => `<text x="11" y="${21 + i * 17}" font-size="12.5" fill="#3b3200">${esc(l)}</text>`).join("") + "</g>";
+  }).join("");
+}
 let rafId = 0;
 function render() {
+  $("gAreas").innerHTML = areasSvg(false, TH);
   $("gGroups").innerHTML = groupsSvg();
   $("gLinks").innerHTML = S.links.map(l => linkSvg(l, false, TH)).join("");
   $("gDevs").innerHTML = S.devices.map(d => devSvg(d, false, TH)).join("");
-  if (!CONNECT.from) $("gOverlay").innerHTML = "";
+  $("gNotes").innerHTML = notesSvg(false, TH);
+  if (!CONNECT.from && !AREA_DRAW) $("gOverlay").innerHTML = "";
   $("empty").classList.toggle("hidden", S.devices.length > 0);
-  cv.classList.toggle("connect", MODE === "connect");
+  cv.className.baseVal = "tool-" + MODE + (MODE === "connect" ? " connect" : "");
   status();
 }
 const scheduleRender = () => { cancelAnimationFrame(rafId); rafId = requestAnimationFrame(render); };
 function applyView() { $("world").setAttribute("transform", `translate(${VIEW.x},${VIEW.y}) scale(${VIEW.k})`); status(); }
+const TOOL_HINTS = {
+  select: () => `${S.devices.length} devices · ${S.links.length} cables · drag to move · double-click a device to open it · right-click for options`,
+  connect: () => CABLE === "auto" ? "⚡ Automatic cable: click one device, then another. Ports are picked for you · Esc stops" : `🔌 ${CABLES[CABLE].label}: click a device and pick a port, then the other device · Esc stops`,
+  inspect: () => "🔍 Inspect: click a device to see its ports and status",
+  delete: () => "🗑️ Delete: click a device, cable, note or area to remove it · Esc stops",
+  note: () => "📝 Note: click anywhere on the workspace to place a note",
+  area: () => "▭ Area: drag on the workspace to draw a box",
+  pdu: () => "✉️ Simple PDU: click the source device, then the destination",
+};
 function status() {
   $("zoomInfo").textContent = Math.round(VIEW.k * 100) + "%";
   let h;
-  if (CONNECT.from) { const a = byId(CONNECT.from); h = `🔌 Now click the device to connect ${a ? a.name : ""} to · Esc cancels`; }
-  else if (MODE === "connect") h = `🔌 Connect: click a device, then another (${$("cableSel").value === "auto" ? "cable picked for you" : CABLES[$("cableSel").value].label}) · V to stop`;
-  else h = `${S.devices.length} devices · ${S.links.length} cables · drag to move · right-click for options · scroll to zoom`;
+  if (CONNECT.from) { const a = byId(CONNECT.from); h = `🔌 ${a ? a.name : ""}${CONNECT.port ? " " + CONNECT.port : ""} → now click the other device · Esc cancels`; }
+  else h = (TOOL_HINTS[MODE] || TOOL_HINTS.select)();
   $("hint").textContent = h;
 }
 function buildLegend() {
-  $("legend").innerHTML = Object.values(CABLES).map(c => `<span><svg viewBox="0 0 24 8"><path d="M1,4 H23" stroke="${c.color}" stroke-width="${Math.min(c.w, 3.5)}"${c.dash ? ` stroke-dasharray="${c.dash.split(" ").map(n => n / 2).join(" ")}"` : ""}/></svg>${esc(c.label.replace(" straight-through", ""))}</span>`).join("");
+  $("legend").innerHTML = CABLE_LIST.map(([, c]) => `<span><svg viewBox="0 0 24 8"><path d="M1,4 H23" stroke="${c.color}" stroke-width="${Math.min(c.w, 3.5)}"${c.dash ? ` stroke-dasharray="${c.dash.split(" ").map(n => n / 2).join(" ")}"` : ""}/></svg>${esc(c.short)}</span>`).join("") +
+    `<span><svg viewBox="0 0 24 8"><polygon points="4,1 4,7 10,4" fill="#22c55e"/><polygon points="13,1 13,7 19,4" fill="#f59e0b"/></svg>up / blocking</span><span><svg viewBox="0 0 24 8"><polygon points="8,1 8,7 14,4" fill="#ef4444"/></svg>down</span>`;
 }
-
 
 // ======================================================================= VIEW
 function toWorld(cx, cy) { const r = cv.getBoundingClientRect(); return {x: (cx - r.left - VIEW.x) / VIEW.k, y: (cy - r.top - VIEW.y) / VIEW.k}; }
@@ -710,15 +796,39 @@ function viewCenter() { const r = cv.getBoundingClientRect(); return toWorld(r.l
 // ======================================================================= PORTS & CABLES
 function usedPorts(id, except) { const u = new Set(); S.links.forEach(l => { if (l === except) return; if (l.a === id && l.pa) u.add(l.pa); if (l.b === id && l.pb) u.add(l.pb); }); return u; }
 const INFRA = ["router", "switch", "l3switch", "hub", "firewall", "cloud", "wlc"];
-function modelOf(dev) { return findModel(dev.type, dev.model) || findModel(dev.type, TYPES[dev.type].def); }
-function allPorts(dev) { const m = modelOf(dev); return m ? [...m.access, ...m.up] : []; }
-function portList(dev, other) {
-  const m = modelOf(dev); if (!m) return [];
-  if (!m.up.length) return dev.type === "laptop" ? m.access.filter(p => p !== "Wireless0") : m.access;
-  const infra = other && INFRA.includes(other.type);
-  return infra ? [...m.up, ...m.access.slice().reverse()] : [...m.access, ...m.up];
+const HAS_CONSOLE = ["router", "switch", "l3switch", "firewall", "wlc"];
+
+// What kind of physical port is this? Decides which cables can plug in.
+function portKind(p) {
+  if (/^console$/i.test(p)) return "console";
+  if (/^rs232$/i.test(p)) return "rs232";
+  if (/^wireless/i.test(p)) return "wireless";
+  if (/^(s|se|serial)\d/i.test(p)) return "serial";
+  return "eth";
 }
-function pickPort(dev, other) { const used = usedPorts(dev.id); return portList(dev, other).find(p => !used.has(p)) || ""; }
+function modelOf(dev) { return findModel(dev.type, dev.model) || findModel(dev.type, TYPES[dev.type].def); }
+function allPorts(dev) {
+  const m = modelOf(dev);
+  const ports = m ? [...m.access, ...m.up] : [];
+  if (HAS_CONSOLE.includes(dev.type)) ports.push("Console");
+  return ports;
+}
+// Ports in the order they should be auto-picked. `cable` limits them to compatible kinds.
+function portList(dev, other, cable) {
+  const m = modelOf(dev); if (!m) return [];
+  const kinds = cable && CABLES[cable] && CABLES[cable].kinds;
+  let list;
+  if (!m.up.length) list = dev.type === "laptop" && cable !== "wireless" ? m.access.filter(p => p !== "Wireless0") : m.access.slice();
+  else {
+    const infra = other && INFRA.includes(other.type);
+    list = infra ? [...m.up, ...m.access.slice().reverse()] : [...m.access, ...m.up];
+  }
+  if (HAS_CONSOLE.includes(dev.type)) list.push("Console");
+  if (kinds) list = list.filter(p => kinds.includes(portKind(p)));
+  else list = list.filter(p => portKind(p) === "eth");
+  return list;
+}
+function pickPort(dev, other, cable) { const used = usedPorts(dev.id); return portList(dev, other, cable).find(p => !used.has(p)) || ""; }
 function autoCable(a, b) {
   const t = [a.type, b.type];
   if (t.includes("tablet")) return "wireless";
@@ -727,12 +837,39 @@ function autoCable(a, b) {
   const sw = x => TYPES[x].cat === "sw";
   return sw(a.type) === sw(b.type) ? "crossover" : "copper";
 }
+// A cable only works if both ends are plugged into a port of a kind it supports
+function cableFits(l) {
+  const c = CABLES[l.cable] || CABLES.copper;
+  if (!c.kinds || l.cable === "wireless") return true;
+  return [l.pa, l.pb].every(p => !p || c.kinds.includes(portKind(p)));
+}
 const portSummary = dev => { const m = modelOf(dev); if (!m) return ""; const g = arr => arr.length > 2 ? `${arr[0]}–${arr[arr.length - 1].split("/").pop()}` : arr.join(", "); return `${m.access.length + m.up.length} ports: ${g(m.access)}${m.up.length ? " + " + g(m.up) : ""}`; };
 
+// ---- link status (green / orange / red lights). Later phases plug real config and STP in here.
+function portAdminUp(dev, port) {
+  const c = dev && dev.cfg && dev.cfg.ifaces && dev.cfg.ifaces[port];
+  return !(c && c.shutdown);
+}
+function portBlocked(dev, port) { return typeof stpBlocked === "function" ? stpBlocked(dev, port) : false; }
+function linkStatus(l) {
+  const a = byId(l.a), b = byId(l.b), c = CABLES[l.cable] || CABLES.copper;
+  if (!a || !b || !c.lights) return {up: true, a: null, b: null};
+  const up = portAdminUp(a, l.pa) && portAdminUp(b, l.pb) && cableFits(l);
+  const st = (dev, port) => !up ? "down" : portBlocked(dev, port) ? "block" : "up";
+  return {up, a: st(a, l.pa), b: st(b, l.pb)};
+}
+const LIGHT = {up: ["#22c55e", "#0f6b31"], block: ["#f59e0b", "#92400e"], down: ["#ef4444", "#7f1d1d"]};
 
 // ======================================================================= ACTIONS
 function select(kind, id) { SEL = {kind, id}; EDITKEY = null; render(); inspector(); }
-function setMode(m) { MODE = m; CONNECT.from = null; $("gOverlay").innerHTML = ""; $("mSelect").classList.toggle("on", m === "select"); $("mConnect").classList.toggle("on", m === "connect"); render(); }
+function setMode(m) {
+  MODE = m; CONNECT.from = null; CONNECT.port = null; hidePortPick(); hidePop();
+  PDU_PICK.from = null;
+  $("gOverlay").innerHTML = "";
+  document.querySelectorAll("#toolSeg [data-tool]").forEach(b => b.classList.toggle("on", b.dataset.tool === m));
+  document.querySelectorAll("#dtiles [data-cable]").forEach(b => b.classList.toggle("on", m === "connect" && b.dataset.cable === CABLE));
+  render();
+}
 function freeSpot(p) {
   for (let i = 0; i < 60; i++) {
     const ang = i * 2.4, rad = i ? 40 + i * 14 : 0, x = p.x + Math.cos(ang) * rad, y = p.y + Math.sin(ang) * rad;
@@ -746,40 +883,140 @@ function addDevice(type, at, model) {
   const T = TYPES[type], p = at || freeSpot(viewCenter());
   const g = v => S.snap ? Math.round(v / 10) * 10 : Math.round(v);
   const d = {id: nid("d"), name: nextName(T.prefix), type, model: model || T.def, ip: "", group: "", x: g(p.x), y: g(p.y)};
-  S.devices.push(d); select("dev", d.id); save();
-  toast(`Added ${d.name} (${d.model}). Press C to cable it.`);
+  S.devices.push(d);
+  if (typeof initDevice === "function") initDevice(d);
+  select("dev", d.id); save();
+  toast(`Added ${d.name} (${d.model}). Pick a cable in Connections to wire it.`);
   return d;
 }
-function connect(a, b) {
+
+// ---- cabling
+function makeLink(a, pa, b, pb, cable) {
   commit();
-  const cable = $("cableSel").value === "auto" ? autoCable(a, b) : $("cableSel").value;
-  const l = {id: nid("l"), a: a.id, b: b.id, cable, pa: "", pb: ""};
-  if (cable !== "wireless") { l.pa = pickPort(a, b); l.pb = pickPort(b, a); }
-  S.links.push(l); save();
+  const l = {id: nid("l"), a: a.id, b: b.id, cable, pa: pa || "", pb: pb || ""};
+  S.links.push(l);
+  if (typeof onTopologyChange === "function") onTopologyChange();
+  save();
   toast(`${a.name} ${l.pa} ↔ ${b.name} ${l.pb} · ${CABLES[cable].label}`);
   select("link", l.id);
+  return l;
 }
-function handleConnectClick(d) {
-  if (!CONNECT.from) { CONNECT.from = d.id; render(); return; }
-  if (CONNECT.from === d.id) { CONNECT.from = null; render(); return; }
-  const a = byId(CONNECT.from); CONNECT.from = null; $("gOverlay").innerHTML = "";
-  if (a) connect(a, d);
+function connect(a, b) {
+  const cable = CABLE === "auto" ? autoCable(a, b) : CABLE;
+  if (cable === "wireless") return makeLink(a, "", b, "", cable);
+  const pa = pickPort(a, b, cable), pb = pickPort(b, a, cable);
+  if (!pa || !pb) { toast(`No free ${CABLES[cable].short} port on ${!pa ? a.name : b.name}.`); return null; }
+  return makeLink(a, pa, b, pb, cable);
 }
-function deleteSel() {
-  if (SEL.kind === "dev") { commit(); const id = SEL.id; S.links = S.links.filter(l => l.a !== id && l.b !== id); S.devices = S.devices.filter(d => d.id !== id); }
-  else if (SEL.kind === "link") { commit(); S.links = S.links.filter(l => l.id !== SEL.id); }
-  else return;
-  select(null, null); save();
+function compatiblePorts(dev, cable) {
+  const kinds = CABLES[cable].kinds;
+  let ports = allPorts(dev);
+  if (dev.type === "laptop" && cable !== "wireless") ports = ports.filter(p => p !== "Wireless0");
+  return ports.filter(p => kinds.includes(portKind(p)));
 }
+const portPick = $("portpick");
+function hidePortPick() { portPick.classList.add("hidden"); }
+function showPortPick(dev, cable, x, y, done) {
+  const used = usedPorts(dev.id), ports = compatiblePorts(dev, cable);
+  if (!ports.length) { toast(`${dev.name} (${dev.model}) has no port for a ${CABLES[cable].short} cable.`); return false; }
+  portPick.innerHTML = `<div class="ct">${esc(dev.name)} · ${esc(CABLES[cable].short)}</div>` +
+    ports.map(p => `<button data-p="${esc(p)}"${used.has(p) ? " disabled" : ""}><span class="pdot ${used.has(p) ? "used" : ""}"></span><span>${esc(p)}</span>${used.has(p) ? '<small>in use</small>' : ""}</button>`).join("");
+  portPick.querySelectorAll("[data-p]").forEach(b => b.onclick = () => { hidePortPick(); done(b.dataset.p); });
+  portPick.classList.remove("hidden");
+  const r = portPick.getBoundingClientRect();
+  portPick.style.left = Math.max(8, Math.min(x + 6, innerWidth - r.width - 8)) + "px";
+  portPick.style.top = Math.max(8, Math.min(y + 6, innerHeight - r.height - 8)) + "px";
+  return true;
+}
+function handleConnectClick(d, ev) {
+  hidePortPick();
+  if (CONNECT.from === d.id) { CONNECT.from = null; CONNECT.port = null; render(); return; }
+  const cable = CABLE;
+  // Automatic: two clicks, ports chosen for you
+  if (cable === "auto" || cable === "wireless") {
+    if (!CONNECT.from) { CONNECT.from = d.id; render(); return; }
+    const a = byId(CONNECT.from); CONNECT.from = null; $("gOverlay").innerHTML = "";
+    if (a) connect(a, d);
+    if (cable === "wireless") setMode("connect");
+    return;
+  }
+  // Specific cable: pick a port on each end, like Packet Tracer
+  const x = ev ? ev.clientX : innerWidth / 2, y = ev ? ev.clientY : innerHeight / 2;
+  if (!CONNECT.from) {
+    showPortPick(d, cable, x, y, p => { CONNECT.from = d.id; CONNECT.port = p; render(); });
+    return;
+  }
+  const a = byId(CONNECT.from), pa = CONNECT.port;
+  showPortPick(d, cable, x, y, p => {
+    CONNECT.from = null; CONNECT.port = null; $("gOverlay").innerHTML = "";
+    if (!a) return;
+    if (cable === "console") {
+      const k1 = portKind(pa), k2 = portKind(p);
+      if (k1 === k2) { toast("A console cable goes from a PC's RS232 port to a router/switch Console port."); render(); return; }
+    }
+    makeLink(a, pa, d, p, cable);
+  });
+}
+function startConnectFrom(id) { if (CABLE !== "auto") CABLE = "auto"; setMode("connect"); CONNECT.from = id; render(); }
+
+// ---- delete / duplicate
+function deleteItem(kind, id) {
+  commit();
+  if (kind === "dev") { S.links = S.links.filter(l => l.a !== id && l.b !== id); S.devices = S.devices.filter(d => d.id !== id); }
+  else if (kind === "link") S.links = S.links.filter(l => l.id !== id);
+  else if (kind === "note") S.notes = S.notes.filter(n => n.id !== id);
+  else if (kind === "area") S.areas = S.areas.filter(a => a.id !== id);
+  if (typeof onTopologyChange === "function") onTopologyChange();
+  if (SEL.id === id) SEL = {kind: null, id: null};
+  render(); inspector(); save();
+}
+function deleteSel() { if (SEL.kind) deleteItem(SEL.kind, SEL.id); }
 function duplicateSel() {
   if (SEL.kind !== "dev") return;
   const s = byId(SEL.id); if (!s) return;
   commit();
-  const d = Object.assign({}, s, {id: nid("d"), name: nextName(TYPES[s.type].prefix), x: s.x + 40, y: s.y + 40});
+  const d = JSON.parse(JSON.stringify(s));
+  Object.assign(d, {id: nid("d"), name: nextName(TYPES[s.type].prefix), x: s.x + 40, y: s.y + 40});
+  if (d.cfg) d.cfg.hostname = d.name;
   S.devices.push(d); select("dev", d.id); save();
 }
-function startConnectFrom(id) { setMode("connect"); CONNECT.from = id; render(); }
 
+// ---- notes and areas
+function addNote(p) {
+  const text = prompt("Note text (use \\n for a new line):", "Note");
+  if (text == null || !text.trim()) return;
+  commit();
+  const n = {id: nid("n"), x: Math.round(p.x), y: Math.round(p.y), text: text.replace(/\\n/g, "\n")};
+  S.notes.push(n); select("note", n.id); save();
+}
+function addArea(r) {
+  if (r.w < 20 || r.h < 20) return;
+  commit();
+  const a = {id: nid("a"), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), label: "Area " + (S.areas.length + 1), color: AREA_COLORS[S.areas.length % AREA_COLORS.length]};
+  S.areas.push(a); select("area", a.id); save();
+}
+
+// ---- inspect popover (Inspect tool)
+const pop = document.createElement("div"); pop.className = "ctx inspop hidden"; document.body.appendChild(pop);
+function hidePop() { pop.classList.add("hidden"); }
+function inspectDevice(d, ev) {
+  const ports = allPorts(d).filter(p => portKind(p) !== "wireless" || d.type === "laptop" || d.type === "tablet");
+  const rows = ports.map(p => {
+    const l = S.links.find(x => (x.a === d.id && x.pa === p) || (x.b === d.id && x.pb === p));
+    let st = "—", nb = "";
+    if (l) { const s = linkStatus(l), mine = l.a === d.id, o = byId(mine ? l.b : l.a); st = (mine ? s.a : s.b) || "up"; nb = `${o ? o.name : "?"} ${mine ? l.pb : l.pa}`; }
+    else if (!portAdminUp(d, p)) st = "admin down";
+    const cls = st === "up" ? "ok" : st === "block" ? "warn" : st === "—" ? "" : "fail";
+    const lbl = st === "up" ? "up" : st === "block" ? "blocking" : st === "—" ? "not connected" : st;
+    return `<tr><td>${esc(p)}</td><td class="${cls}">${esc(lbl)}</td><td>${esc(nb)}</td></tr>`;
+  }).join("");
+  const extra = typeof inspectExtra === "function" ? inspectExtra(d) : "";
+  pop.innerHTML = `<div class="ct">${esc(d.name)} · ${esc(d.model)}</div><div class="popb"><table class="pdutbl"><tr><th>Port</th><th>Status</th><th>Connected to</th></tr>${rows}</table>${extra}</div>`;
+  pop.classList.remove("hidden");
+  const r = pop.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(ev.clientX + 10, innerWidth - r.width - 8)) + "px";
+  pop.style.top = Math.max(8, Math.min(ev.clientY + 10, innerHeight - r.height - 8)) + "px";
+}
 
 // ======================================================================= AUTO LAYOUT
 function arrange(dir, quiet) {
@@ -822,39 +1059,106 @@ function arrange(dir, quiet) {
 
 // ======================================================================= POINTER / KEYBOARD / CONTEXT MENU
 let drag = null;
+const snapV = v => S.snap ? Math.round(v / 10) * 10 : Math.round(v);
+function hitAt(e) {
+  const t = e.target;
+  const el = t.closest("[data-areah],[data-dev],[data-note],[data-link],[data-area]");
+  if (!el) return null;
+  if (el.dataset.areah) return {kind: "areah", id: el.dataset.areah};
+  if (el.dataset.dev) return {kind: "dev", id: el.dataset.dev};
+  if (el.dataset.note) return {kind: "note", id: el.dataset.note};
+  if (el.dataset.link) return {kind: "link", id: el.dataset.link};
+  return {kind: "area", id: el.dataset.area};
+}
+function startPan(e) { drag = {kind: "pan", sx: e.clientX, sy: e.clientY, vx: VIEW.x, vy: VIEW.y}; cv.setPointerCapture(e.pointerId); cv.classList.add("panning"); }
 cv.addEventListener("pointerdown", e => {
-  hideCtx();
+  hideCtx(); hidePop();
   if (e.button !== 0 && e.button !== 1) return;
   closeMenus();
-  const devEl = e.target.closest("[data-dev]"), lkEl = e.target.closest("[data-link]");
-  const p = toWorld(e.clientX, e.clientY);
-  if (devEl && e.button === 0) {
-    const d = byId(devEl.dataset.dev); if (!d) return;
-    if (MODE === "connect" || CONNECT.from) { handleConnectClick(d); return; }
-    if (SEL.kind !== "dev" || SEL.id !== d.id) select("dev", d.id);
-    drag = {kind: "dev", id: d.id, ox: p.x - d.x, oy: p.y - d.y, moved: false, start: snap()};
+  if (!portPick.classList.contains("hidden")) { hidePortPick(); if (!CONNECT.port) { CONNECT.from = null; render(); } }
+  const hit = hitAt(e), p = toWorld(e.clientX, e.clientY);
+  if (e.button === 1) { startPan(e); return; }
+  const dev = hit && hit.kind === "dev" ? byId(hit.id) : null;
+
+  // ---- tools that act on a click
+  if (MODE === "connect" || CONNECT.from) {
+    if (dev) { handleConnectClick(dev, e); return; }
+    if (CONNECT.from) { CONNECT.from = null; CONNECT.port = null; render(); return; }
+  }
+  if (MODE === "delete") { if (hit && hit.kind !== "areah") deleteItem(hit.kind, hit.id); else startPan(e); return; }
+  if (MODE === "inspect") { if (dev) { select("dev", dev.id); inspectDevice(dev, e); } else startPan(e); return; }
+  if (MODE === "pdu") { if (dev) pduClick(dev); else startPan(e); return; }
+  if (MODE === "note") { if (hit && hit.kind === "note") select("note", hit.id); else { addNote(p); setMode("select"); } return; }
+  if (MODE === "area" && !(hit && hit.kind === "areah")) {
+    AREA_DRAW = {x0: p.x, y0: p.y, x: p.x, y: p.y, w: 0, h: 0};
+    drag = {kind: "areaDraw"}; cv.setPointerCapture(e.pointerId); return;
+  }
+
+  // ---- select tool
+  if (hit && hit.kind === "areah") {
+    const a = byArea(hit.id); if (!a) return;
+    drag = {kind: "areaResize", id: a.id, start: snap(), moved: false}; cv.setPointerCapture(e.pointerId); return;
+  }
+  if (dev) {
+    if (SEL.kind !== "dev" || SEL.id !== dev.id) select("dev", dev.id);
+    drag = {kind: "dev", id: dev.id, ox: p.x - dev.x, oy: p.y - dev.y, moved: false, start: snap()};
     cv.setPointerCapture(e.pointerId); return;
   }
-  if (lkEl && e.button === 0 && !CONNECT.from) { select("link", lkEl.dataset.link); return; }
-  if (CONNECT.from) { CONNECT.from = null; render(); }
-  if (e.button === 0 && SEL.kind) select(null, null);
-  drag = {kind: "pan", sx: e.clientX, sy: e.clientY, vx: VIEW.x, vy: VIEW.y};
-  cv.setPointerCapture(e.pointerId); cv.classList.add("panning");
+  if (hit && (hit.kind === "note" || hit.kind === "area")) {
+    const o = hit.kind === "note" ? byNote(hit.id) : byArea(hit.id); if (!o) return;
+    if (SEL.kind !== hit.kind || SEL.id !== hit.id) select(hit.kind, hit.id);
+    drag = {kind: hit.kind, id: hit.id, ox: p.x - o.x, oy: p.y - o.y, moved: false, start: snap()};
+    cv.setPointerCapture(e.pointerId); return;
+  }
+  if (hit && hit.kind === "link") { select("link", hit.id); return; }
+  if (SEL.kind) select(null, null);
+  startPan(e);
 });
 cv.addEventListener("pointermove", e => {
   const p = toWorld(e.clientX, e.clientY);
   if (CONNECT.from) { const a = byId(CONNECT.from); if (a) $("gOverlay").innerHTML = `<line x1="${a.x}" y1="${a.y}" x2="${f2(p.x)}" y2="${f2(p.y)}" stroke="${TH.accent}" stroke-width="2.2" stroke-dasharray="6 5"/><circle cx="${f2(p.x)}" cy="${f2(p.y)}" r="4" fill="${TH.accent}"/>`; }
+  if (PDU_PICK.from) { const a = byId(PDU_PICK.from); if (a) $("gOverlay").innerHTML = `<line x1="${a.x}" y1="${a.y}" x2="${f2(p.x)}" y2="${f2(p.y)}" stroke="#d4a017" stroke-width="2.2" stroke-dasharray="4 4"/><text x="${f2(p.x + 8)}" y="${f2(p.y - 8)}" font-size="16">✉️</text>`; }
   if (!drag) return;
   if (drag.kind === "pan") { VIEW.x = drag.vx + e.clientX - drag.sx; VIEW.y = drag.vy + e.clientY - drag.sy; applyView(); return; }
-  const d = byId(drag.id); if (!d) return;
-  let nx = p.x - drag.ox, ny = p.y - drag.oy;
-  if (S.snap) { nx = Math.round(nx / 10) * 10; ny = Math.round(ny / 10) * 10; }
-  if (nx !== d.x || ny !== d.y) { if (!drag.moved) { H.past.push(drag.start); H.future = []; drag.moved = true; updateUndo(); } d.x = nx; d.y = ny; scheduleRender(); }
+  if (drag.kind === "areaDraw") {
+    const A = AREA_DRAW; A.x = Math.min(A.x0, p.x); A.y = Math.min(A.y0, p.y); A.w = Math.abs(p.x - A.x0); A.h = Math.abs(p.y - A.y0);
+    $("gOverlay").innerHTML = `<rect x="${f2(A.x)}" y="${f2(A.y)}" width="${f2(A.w)}" height="${f2(A.h)}" rx="14" fill="${TH.accent}" fill-opacity=".08" stroke="${TH.accent}" stroke-width="1.6" stroke-dasharray="6 4"/>`;
+    return;
+  }
+  const begin = () => { if (!drag.moved) { H.past.push(drag.start); H.future = []; drag.moved = true; updateUndo(); } };
+  if (drag.kind === "areaResize") {
+    const a = byArea(drag.id); if (!a) return;
+    const w = Math.max(40, snapV(p.x - a.x)), h = Math.max(30, snapV(p.y - a.y));
+    if (w !== a.w || h !== a.h) { begin(); a.w = w; a.h = h; scheduleRender(); }
+    return;
+  }
+  const o = drag.kind === "dev" ? byId(drag.id) : drag.kind === "note" ? byNote(drag.id) : byArea(drag.id);
+  if (!o) return;
+  const nx = snapV(p.x - drag.ox), ny = snapV(p.y - drag.oy);
+  if (nx !== o.x || ny !== o.y) {
+    begin();
+    if (drag.kind === "area" && !e.altKey) {
+      // moving an area carries the devices inside it, like a container
+      const dx = nx - o.x, dy = ny - o.y;
+      if (!drag.inside) drag.inside = S.devices.filter(d => d.x > o.x && d.x < o.x + o.w && d.y > o.y && d.y < o.y + o.h).map(d => d.id);
+      drag.inside.forEach(id => { const d = byId(id); if (d) { d.x += dx; d.y += dy; } });
+    }
+    o.x = nx; o.y = ny; scheduleRender();
+  }
 });
-const endDrag = () => { if (drag && drag.moved) save(); drag = null; cv.classList.remove("panning"); };
+const endDrag = () => {
+  if (drag && drag.kind === "areaDraw") { const A = AREA_DRAW; AREA_DRAW = null; $("gOverlay").innerHTML = ""; addArea(A); setMode("select"); }
+  else if (drag && drag.moved) save();
+  drag = null; cv.classList.remove("panning");
+};
 cv.addEventListener("pointerup", endDrag);
 cv.addEventListener("pointercancel", endDrag);
-cv.addEventListener("dblclick", e => { const el = e.target.closest("[data-dev]"); if (el) { select("dev", el.dataset.dev); focusName(); } });
+cv.addEventListener("dblclick", e => {
+  const hit = hitAt(e); if (!hit) return;
+  if (hit.kind === "dev") { select("dev", hit.id); if (typeof openDeviceWindow === "function") openDeviceWindow(byId(hit.id)); else focusName(); }
+  else if (hit.kind === "note") { const n = byNote(hit.id); const t = prompt("Edit note (use \\n for a new line):", n.text.replace(/\n/g, "\\n")); if (t != null) { commit(); n.text = t.replace(/\\n/g, "\n"); render(); inspector(); save(); } }
+  else if (hit.kind === "area") { select("area", hit.id); const f = $("insp").querySelector('[data-f="label"]'); if (f) { f.focus(); f.select(); } }
+});
 cv.addEventListener("wheel", e => { e.preventDefault(); zoomBy(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY); }, {passive: false});
 cv.addEventListener("dragover", e => { if (e.dataTransfer.types.includes("text/x-device")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
 cv.addEventListener("drop", e => {
@@ -873,36 +1177,49 @@ function showCtx(x, y, title, items) {
   ctx.style.left = Math.min(x, innerWidth - r.width - 8) + "px"; ctx.style.top = Math.min(y, innerHeight - r.height - 8) + "px";
 }
 cv.addEventListener("contextmenu", e => {
-  e.preventDefault(); CONNECT.from = null;
-  const devEl = e.target.closest("[data-dev]"), lkEl = e.target.closest("[data-link]");
-  if (devEl) {
-    const d = byId(devEl.dataset.dev); select("dev", d.id);
-    showCtx(e.clientX, e.clientY, d.name, [
-      {icon: "✏️", label: "Rename", run: focusName},
-      {icon: "🔌", label: "Connect from here", run: () => startConnectFrom(d.id)},
+  e.preventDefault(); CONNECT.from = null; hidePortPick(); hidePop();
+  const hit = hitAt(e);
+  if (hit && hit.kind === "dev") {
+    const d = byId(hit.id); select("dev", d.id);
+    const items = [];
+    if (typeof openDeviceWindow === "function") items.push({icon: "🪟", label: "Open device window", run: () => openDeviceWindow(d)});
+    items.push({icon: "✏️", label: "Rename", run: focusName},
+      {icon: "🔍", label: "Inspect ports", run: () => inspectDevice(d, e)},
+      {icon: "🔌", label: "Connect from here (auto cable)", run: () => startConnectFrom(d.id)},
       {icon: "📄", label: "Duplicate", run: duplicateSel},
-      "-", {icon: "🗑️", label: "Delete device", danger: true, run: deleteSel}]);
-  } else if (lkEl) {
-    const l = byLink(lkEl.dataset.link); select("link", l.id);
+      "-", {icon: "🗑️", label: "Delete device", danger: true, run: deleteSel});
+    showCtx(e.clientX, e.clientY, d.name, items);
+  } else if (hit && hit.kind === "link") {
+    const l = byLink(hit.id); select("link", l.id);
     showCtx(e.clientX, e.clientY, "Cable", [
-      ...Object.entries(CABLES).map(([k, c]) => ({icon: k === l.cable ? "●" : "", label: c.label, run: () => { commit(); l.cable = k; if (k === "wireless") { l.pa = ""; l.pb = ""; } render(); inspector(); save(); }})),
+      ...CABLE_LIST.map(([k, c]) => ({icon: k === l.cable ? "●" : "", label: c.label, run: () => { commit(); l.cable = k; if (k === "wireless") { l.pa = ""; l.pb = ""; } render(); inspector(); save(); }})),
       "-", {icon: "🗑️", label: "Delete cable", danger: true, run: deleteSel}]);
+  } else if (hit && (hit.kind === "note" || hit.kind === "area")) {
+    select(hit.kind, hit.id);
+    showCtx(e.clientX, e.clientY, hit.kind === "note" ? "Note" : "Area", [{icon: "🗑️", label: "Delete " + hit.kind, danger: true, run: deleteSel}]);
   } else {
     const p = toWorld(e.clientX, e.clientY);
-    showCtx(e.clientX, e.clientY, "Canvas", [
+    showCtx(e.clientX, e.clientY, "Workspace", [
       {icon: "🔀", label: "Add router here", run: () => addDevice("router", p)},
       {icon: "🔲", label: "Add switch here", run: () => addDevice("switch", p)},
       {icon: "💻", label: "Add PC here", run: () => addDevice("pc", p)},
+      {icon: "📝", label: "Add note here", run: () => addNote(p)},
       "-", {icon: "⇢", label: "Arrange left → right", run: () => arrange("LR")},
       {icon: "⇣", label: "Arrange top → bottom", run: () => arrange("TB")},
       {icon: "⤢", label: "Fit to screen", run: fit},
       "-", {icon: "📋", label: "Export to Obsidian…", run: openExport}]);
   }
 });
-document.addEventListener("pointerdown", e => { if (!ctx.contains(e.target)) hideCtx(); });
+document.addEventListener("pointerdown", e => {
+  if (!ctx.contains(e.target)) hideCtx();
+  if (!pop.contains(e.target) && e.target !== cv && !cv.contains(e.target)) hidePop();
+  if (!portPick.contains(e.target) && !cv.contains(e.target)) { if (!portPick.classList.contains("hidden")) { hidePortPick(); if (!CONNECT.port) { CONNECT.from = null; render(); } } }
+});
 
+const TOOL_KEYS = {v: "select", i: "inspect", d: "delete", n: "note", a: "area", p: "pdu"};
 document.addEventListener("keydown", e => {
-  if ($("exportDlg").open) return;
+  if (document.querySelector("dialog[open]")) return;
+  if (e.target.closest && e.target.closest(".devwin")) return;
   const tag = (e.target.tagName || "").toLowerCase();
   if (tag === "input" || tag === "textarea" || tag === "select") { if (e.key === "Escape") e.target.blur(); return; }
   const ctrl = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
@@ -910,58 +1227,97 @@ document.addEventListener("keydown", e => {
   else if (ctrl && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
   else if (ctrl && k === "d") { e.preventDefault(); duplicateSel(); }
   else if (ctrl && k === "e") { e.preventDefault(); openExport(); }
-  else if (ctrl) return;
+  else if (ctrl || e.altKey) return;
   else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSel(); }
-  else if (e.key === "Escape") { hideCtx(); if (CONNECT.from) { CONNECT.from = null; render(); } else if (MODE === "connect") setMode("select"); else select(null, null); closeMenus(); }
-  else if (k === "c") setMode("connect");
-  else if (k === "v") setMode("select");
+  else if (e.key === "Escape") {
+    hideCtx(); hidePop(); hidePortPick();
+    if (CONNECT.from || PDU_PICK.from) { CONNECT.from = null; CONNECT.port = null; PDU_PICK.from = null; $("gOverlay").innerHTML = ""; render(); }
+    else if (MODE !== "select") setMode("select"); else select(null, null);
+    closeMenus();
+  }
+  else if (k === "c") { setMode("connect"); }
+  else if (TOOL_KEYS[k]) setMode(TOOL_KEYS[k]);
   else if (k === "f") fit();
   else if (e.key === "+" || e.key === "=") zoomBy(1.2);
   else if (e.key === "-") zoomBy(1 / 1.2);
 });
 
-
-// ======================================================================= PALETTE
-function palItem(type, model, isModel) {
+// ======================================================================= DOCK (Packet Tracer-style device + connection chooser)
+let DOCK_CAT = "routers";
+try { DOCK_CAT = localStorage.getItem("ndb.dock") || "routers"; } catch (e) {}
+// little cable pictures for the Connections category
+function cableIcon(k) {
+  if (k === "auto") return `<svg viewBox="0 0 48 40"><path d="M27 3 L12 22 H23 L19 37 L36 16 H25 Z" fill="#f2b705" stroke="#8a6500" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
+  const c = CABLES[k];
+  let body;
+  if (c.zig) body = `<path d="M5,33 L19,25 L26,32 L29,14 L36,21 L43,7" fill="none" stroke="${c.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`;
+  else if (k === "wireless") body = `<path d="M10,30 a18,18 0 0 1 28,0 M15,25 a11,11 0 0 1 18,0 M20,20 a5,5 0 0 1 8,0" fill="none" stroke="${c.color}" stroke-width="2.6" stroke-linecap="round"/><circle cx="24" cy="33" r="2.6" fill="${c.color}"/>`;
+  else body = `<path d="M5,34 C16,34 14,8 25,8 S35,30 43,6" fill="none" stroke="${c.color}" stroke-width="3"${c.dash ? ` stroke-dasharray="${c.dash.split(" ").map(n => n * .6).join(" ")}"` : ""} stroke-linecap="round"/>`;
+  if (c.dce) body += `<circle cx="38" cy="30" r="6" fill="#fff" stroke="${c.color}" stroke-width="1.6"/><path d="M38,26.5 V30 L40.5,31.5" stroke="${c.color}" stroke-width="1.4" fill="none" stroke-linecap="round"/>`;
+  if (k === "console") body += `<rect x="1" y="30" width="8" height="8" rx="1.5" fill="#25323f"/><rect x="39" y="2" width="8" height="8" rx="1.5" fill="#25323f"/>`;
+  return `<svg viewBox="0 0 48 40">${body}</svg>`;
+}
+const CABLE_TIPS = {
+  auto: "Lets the simulator pick the right cable and the next free ports.",
+  console: "Rollover cable: PC RS232 → router/switch Console port. Use it for the PC's Terminal.",
+  copper: "Straight-through: different device kinds (PC↔switch, router↔switch).",
+  crossover: "Cross-over: same kinds (switch↔switch, router↔router, PC↔PC).",
+  fiber: "Fiber: long uplinks between switches/routers with SFP ports.",
+  serialDCE: "Serial DCE: the end you click first is DCE and must set `clock rate`.",
+  serialDTE: "Serial DTE: the end you click first is DTE (the other end is DCE).",
+  wireless: "Associate a laptop/tablet with an access point.",
+};
+function dockTile(html, label, title) {
   const b = document.createElement("button");
-  b.className = "pal" + (isModel ? " model" : "");
-  b.draggable = true;
-  const m = model ? findModel(type, model) : null;
-  b.title = isModel ? `${TYPES[type].label} ${model}: ${m ? m.desc : ""}. Drag onto the canvas or click to add.` : `${TYPES[type].label}: drag onto the canvas, or click to add. Search for a model name to pick a specific one.`;
-  b.innerHTML = iconSvg(type) + (isModel ? `<span><b>${esc(model)}</b><br><small>${esc(TYPES[type].label)} · ${esc(m ? m.desc : "")}</small></span>` : `<span>${esc(TYPES[type].label)}</span>`);
-  b.addEventListener("dragstart", e => { e.dataTransfer.setData("text/x-device", type + "|" + (model || "")); e.dataTransfer.effectAllowed = "copy"; });
-  b.addEventListener("click", () => addDevice(type, null, model || undefined));
+  b.className = "dtile"; b.title = title; b.innerHTML = html + `<span>${esc(label)}</span>`;
+  b.addEventListener("mouseenter", () => { $("dlabel").textContent = title; });
   return b;
 }
-function buildPalette() {
-  const el = $("plist"), q = $("psearch").value.trim().toLowerCase();
-  el.innerHTML = "";
-  if (!q) {
-    PALETTE.forEach(([title, types]) => {
-      const h = document.createElement("h3"); h.textContent = title; el.appendChild(h);
-      const g = document.createElement("div"); g.className = "pgrid"; types.forEach(t => g.appendChild(palItem(t))); el.appendChild(g);
+function deviceTile(m) {
+  const b = dockTile(iconSvg(m.type), m.name, `${TYPES[m.type].label} ${m.name}: ${m.desc}. Drag onto the workspace or click to add.`);
+  b.draggable = true;
+  b.addEventListener("dragstart", e => { e.dataTransfer.setData("text/x-device", m.type + "|" + m.name); e.dataTransfer.effectAllowed = "copy"; });
+  b.addEventListener("click", () => addDevice(m.type, null, m.name));
+  return b;
+}
+function cableTiles(el) {
+  [["auto", CABLES.auto], ...CABLE_LIST].forEach(([k, c]) => {
+    const b = dockTile(cableIcon(k), c.short, `${c.label}. ${CABLE_TIPS[k] || ""}`);
+    b.classList.add("cab"); b.dataset.cable = k;
+    b.classList.toggle("on", MODE === "connect" && CABLE === k);
+    b.addEventListener("click", () => {
+      if (MODE === "connect" && CABLE === k) { setMode("select"); return; }
+      CABLE = k; setMode("connect");
     });
-    const h = document.createElement("h3"); h.innerHTML = "<span>Popular Cisco models</span>"; el.appendChild(h);
-    const g = document.createElement("div"); g.className = "pgrid";
-    [["router", "1941"], ["router", "2911"], ["router", "ISR4331"], ["switch", "2960-24TT"], ["switch", "C9300-48P"], ["l3switch", "3650-24PS"], ["firewall", "ASA 5506-X"], ["wlc", "WLC-3504"]].forEach(([t, m]) => g.appendChild(palItem(t, m, true)));
-    el.appendChild(g);
+    el.appendChild(b);
+  });
+}
+function buildDock() {
+  const cats = $("dcats");
+  cats.innerHTML = DOCK_CATS.map(c => `<button class="dcat${c.k === DOCK_CAT ? " on" : ""}" data-k="${c.k}" title="${esc(c.label)}">${c.cables ? cableIcon("auto") : iconSvg(c.icon)}<span>${esc(c.label)}</span></button>`).join("");
+  cats.querySelectorAll(".dcat").forEach(b => {
+    b.onclick = () => { DOCK_CAT = b.dataset.k; $("psearch").value = ""; try { localStorage.setItem("ndb.dock", DOCK_CAT); } catch (e) {} buildDock(); };
+    b.onmouseenter = () => { $("dlabel").textContent = b.title; };
+  });
+  const el = $("dtiles"), q = $("psearch").value.trim().toLowerCase();
+  el.innerHTML = "";
+  if (q) {
+    const models = ALLMODELS.filter(m => (m.name + " " + m.desc + " " + m.series + " " + TYPES[m.type].label + " " + m.type).toLowerCase().includes(q));
+    models.forEach(m => el.appendChild(deviceTile(m)));
+    $("dlabel").textContent = models.length ? `${models.length} model${models.length === 1 ? "" : "s"} match "${q}"` : `Nothing matches "${q}". Try "2911", "2960", "9300" or "ASA".`;
     return;
   }
-  const types = Object.keys(TYPES).filter(t => TYPES[t].label.toLowerCase().includes(q) || t.includes(q));
-  const models = ALLMODELS.filter(m => (m.name + " " + m.desc + " " + m.series + " " + TYPES[m.type].label).toLowerCase().includes(q));
-  if (types.length) { const g = document.createElement("div"); g.className = "pgrid"; types.forEach(t => g.appendChild(palItem(t))); el.appendChild(g); }
-  if (models.length) {
-    const h = document.createElement("h3"); h.textContent = `Models (${models.length})`; el.appendChild(h);
-    const g = document.createElement("div"); g.className = "pgrid"; models.forEach(m => g.appendChild(palItem(m.type, m.name, true))); el.appendChild(g);
-  }
-  if (!types.length && !models.length) el.innerHTML = `<p class="pempty">Nothing matches "${esc(q)}". Try "router", "2960", "9300" or "ASA".</p>`;
+  const cat = DOCK_CATS.find(c => c.k === DOCK_CAT) || DOCK_CATS[0];
+  if (cat.cables) { cableTiles(el); $("dlabel").textContent = MODE === "connect" ? CABLES[CABLE].label : "Pick a cable, then click two devices"; return; }
+  ALLMODELS.filter(m => cat.types.includes(m.type)).forEach(m => el.appendChild(deviceTile(m)));
+  $("dlabel").textContent = `${cat.label}: drag a model onto the workspace`;
 }
-$("psearch").addEventListener("input", buildPalette);
-
+function buildPalette() { buildDock(); }
+$("psearch").addEventListener("input", buildDock);
 
 // ======================================================================= INSPECTOR
 const typeOptions = sel => Object.entries(TYPES).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v.label)}</option>`).join("");
-const cableOptions = sel => Object.entries(CABLES).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v.label)}</option>`).join("");
+const cableOptions = sel => [...CABLE_LIST, ...(CABLES[sel] && CABLES[sel].legacy ? [[sel, CABLES[sel]]] : [])].map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v.label)}</option>`).join("");
 const devOptions = sel => S.devices.map(d => `<option value="${esc(d.id)}"${d.id === sel ? " selected" : ""}>${esc(d.name)}</option>`).join("");
 function modelOptions(type, cur) {
   const known = !!findModel(type, cur);
@@ -1003,7 +1359,7 @@ function inspector() {
       <datalist id="groupList">${groups.map(g => `<option value="${esc(g)}"></option>`).join("")}</datalist>
       <div class="sect">Connections (${conns.length})</div>
       <ul class="conns">${conns.map(l => { const mine = l.a === d.id, o = byId(mine ? l.b : l.a); return `<li><button data-l="${esc(l.id)}"><span class="swatch" style="background:${(CABLES[l.cable] || CABLES.copper).color}"></span><span>${esc((mine ? l.pa : l.pb) || "—")} → <b>${esc(o ? o.name : "?")}</b> ${esc((mine ? l.pb : l.pa) || "")}</span></button></li>`; }).join("") || '<li class="muted" style="font-size:12.5px">None yet. Click Connect from here, then another device.</li>'}</ul>
-      <div class="btns"><button class="btn primary" id="iConn">🔌 Connect from here</button><button class="btn" id="iDup">Duplicate</button><button class="btn danger" id="iDel">Delete</button></div>`;
+      <div class="btns">${typeof openDeviceWindow === "function" ? '<button class="btn primary" id="iOpen">🪟 Open</button>' : ""}<button class="btn" id="iConn">🔌 Connect</button><button class="btn" id="iDup">Duplicate</button><button class="btn danger" id="iDel">Delete</button></div>`;
     el.querySelector("#iTitle").textContent = d.name;
     el.querySelector('[data-f="name"]').value = d.name;
     el.querySelector('[data-f="ip"]').value = d.ip || "";
@@ -1021,6 +1377,7 @@ function inspector() {
     el.querySelector("#iCustom").addEventListener("input", e => { if (EDITKEY !== "model") { commit(); EDITKEY = "model"; } d.model = e.target.value; scheduleRender(); save(); });
     el.querySelectorAll("[data-l]").forEach(b => b.onclick = () => select("link", b.dataset.l));
     el.querySelector("#iConn").onclick = () => startConnectFrom(d.id);
+    if (el.querySelector("#iOpen")) el.querySelector("#iOpen").onclick = () => openDeviceWindow(d);
     el.querySelector("#iDup").onclick = duplicateSel;
     el.querySelector("#iDel").onclick = deleteSel;
     return;
@@ -1038,9 +1395,33 @@ function inspector() {
     el.querySelector("#iTitle").textContent = `${a ? a.name : "?"} ↔ ${b ? b.name : "?"}`;
     el.querySelector('[data-f="pa"]').value = l.pa || "";
     el.querySelector('[data-f="pb"]').value = l.pb || "";
-    bindFields(el, l, f => { if (f === "a" || f === "b" || f === "cable") inspector(); });
+    bindFields(el, l, f => { if (f === "a" || f === "b" || f === "cable") inspector(); if (typeof onTopologyChange === "function") onTopologyChange(); });
     el.querySelector("#iSwap").onclick = () => { commit(); [l.a, l.b, l.pa, l.pb] = [l.b, l.a, l.pb, l.pa]; render(); inspector(); save(); };
-    el.querySelector("#iAuto").onclick = () => { commit(); const A = byId(l.a), B = byId(l.b); l.pa = ""; l.pb = ""; if (l.cable !== "wireless" && A && B) { l.pa = pickPort(A, B); l.pb = pickPort(B, A); } render(); inspector(); save(); };
+    el.querySelector("#iAuto").onclick = () => { commit(); const A = byId(l.a), B = byId(l.b); l.pa = ""; l.pb = ""; if (l.cable !== "wireless" && A && B) { l.pa = pickPort(A, B, l.cable); l.pb = pickPort(B, A, l.cable); } render(); inspector(); save(); };
+    el.querySelector("#iDel").onclick = deleteSel;
+    return;
+  }
+  if (SEL.kind === "note" && byNote(SEL.id)) {
+    const n = byNote(SEL.id);
+    el.innerHTML = `<div class="ih"><div class="ic note">📝</div><div><div class="it">Note</div><div class="is">Text on the workspace</div></div></div>
+      <label>Text<textarea data-f="text" rows="5"></textarea></label>
+      <div class="btns"><button class="btn danger" id="iDel">Delete note</button></div>`;
+    el.querySelector('[data-f="text"]').value = n.text;
+    bindFields(el, n);
+    el.querySelector("#iDel").onclick = deleteSel;
+    return;
+  }
+  if (SEL.kind === "area" && byArea(SEL.id)) {
+    const a = byArea(SEL.id);
+    el.innerHTML = `<div class="ih"><div class="ic" style="color:${a.color};font-size:26px">▭</div><div><div class="it">Area</div><div class="is">${a.w} × ${a.h}</div></div></div>
+      <label>Label<input data-f="label" autocomplete="off"></label>
+      <div class="sect">Colour</div>
+      <div class="swatches">${AREA_COLORS.map(c => `<button class="sw${c === a.color ? " on" : ""}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("")}</div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Drag the area to move it with the devices inside (hold Alt to move just the box). Drag the corner square to resize.</p>
+      <div class="btns"><button class="btn danger" id="iDel">Delete area</button></div>`;
+    el.querySelector('[data-f="label"]').value = a.label || "";
+    bindFields(el, a);
+    el.querySelectorAll("[data-c]").forEach(b => b.onclick = () => { commit(); a.color = b.dataset.c; render(); inspector(); save(); });
     el.querySelector("#iDel").onclick = deleteSel;
     return;
   }
@@ -1053,19 +1434,19 @@ function inspector() {
       <label><input type="checkbox" data-s="showModel"> Device models</label>
       <label><input type="checkbox" data-s="showIP"> IP addresses / notes</label>
       <label><input type="checkbox" data-s="showPorts"> Port names on cables</label>
-      <label><input type="checkbox" data-s="showLights"> Green link lights</label>
+      <label><input type="checkbox" data-s="showLights"> Link lights (green / orange / red)</label>
       <label><input type="checkbox" data-s="snap"> Snap to grid while dragging</label>
     </div>
     <div class="sect">How to use</div>
     <ol class="howto">
-      <li><b>Add:</b> drag a device from the left (search "2911", "9300"… for a specific model).</li>
-      <li><b>Cable:</b> press <kbd>C</kbd>, click two devices. Ports come from the model.</li>
-      <li><b>Edit:</b> click or right-click a device or cable.</li>
+      <li><b>Add:</b> pick a category in the bottom-left panel, then drag a model onto the workspace (or search "2911", "9300"…).</li>
+      <li><b>Cable:</b> open <b>Connections</b>, pick a cable (⚡ = automatic), click a device, choose a port, then the other device.</li>
+      <li><b>Configure:</b> double-click a device to open its window.</li>
       <li><b>Tidy:</b> Arrange lays it out as a neat tree.</li>
       <li><b>Export to Obsidian</b> (top right): copy the picture and/or the note text.</li>
     </ol>
     <div class="sect">Shortcuts</div>
-    <div class="keys"><kbd>V</kbd> select · <kbd>C</kbd> connect · <kbd>Del</kbd> delete · <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> undo/redo · <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate · <kbd>Ctrl</kbd>+<kbd>E</kbd> export · <kbd>F</kbd> fit · <kbd>Esc</kbd> cancel</div>`;
+    <div class="keys"><kbd>V</kbd> select · <kbd>C</kbd> connect · <kbd>I</kbd> inspect · <kbd>D</kbd> delete tool · <kbd>N</kbd> note · <kbd>A</kbd> area · <kbd>P</kbd> PDU · <kbd>Del</kbd> delete · <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> undo/redo · <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate · <kbd>Ctrl</kbd>+<kbd>E</kbd> export · <kbd>F</kbd> fit · <kbd>Esc</kbd> cancel</div>`;
   const t = el.querySelector("#sTitle"); t.value = S.title || "";
   t.addEventListener("input", () => { if (EDITKEY !== "title") { commit(); EDITKEY = "title"; } S.title = t.value; save(); });
   el.querySelectorAll("[data-s]").forEach(cb => { cb.checked = S[cb.dataset.s] !== false; cb.addEventListener("change", () => { S[cb.dataset.s] = cb.checked; render(); save(); }); });
@@ -1176,7 +1557,7 @@ function exportSvg() {
   const x = Math.floor(b.x - pad), y = Math.floor(b.y - pad - th), w = Math.ceil(b.w + pad * 2), h = Math.ceil(b.h + pad * 2 + th);
   const title = th ? `<text x="${x + pad}" y="${y + 34}" font-size="20" font-weight="700" fill="${T.text}">${esc(S.title)}</text>` : "";
   const bg = EX.bg === "transparent" ? "" : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${T.canvas}"/>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}" font-family="Segoe UI, system-ui, -apple-system, Arial, sans-serif"><defs>${DEFS}</defs>${bg}${title}${groupsSvg()}${S.links.map(l => linkSvg(l, true, T)).join("")}${S.devices.map(d => devSvg(d, true, T)).join("")}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}" font-family="Segoe UI, system-ui, -apple-system, Arial, sans-serif"><defs>${DEFS}</defs>${bg}${title}${areasSvg(true, T)}${groupsSvg()}${S.links.map(l => linkSvg(l, true, T)).join("")}${S.devices.map(d => devSvg(d, true, T)).join("")}${notesSvg(true, T)}</svg>`;
   return {svg, w, h};
 }
 const svgUrl = svg => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -1282,7 +1663,7 @@ function exampleCompany() {
   const s1 = D("ACC1", "switch", "", "Office", "C9200-24P"), s2 = D("ACC2", "switch", "", "Office", "C9200-24P");
   const web = D("SRV-WEB", "server", "10.1.99.10/24", "Server room"), dns = D("SRV-DNS", "server", "10.1.99.11/24", "Server room");
   L(isp, "Eth0", fw, "Eth1/1", "copper"); L(fw, "Eth1/2", r, "G0/0/1", "copper"); L(r, "G0/0/0", mls, "Te1/1/1", "fiber");
-  L(mls, "G1/0/1", s1, "G1/1/1", "trunk"); L(mls, "G1/0/2", s2, "G1/1/1", "trunk"); L(mls, "G1/0/23", web, "G0", "copper"); L(mls, "G1/0/24", dns, "G0", "copper");
+  L(mls, "G1/0/1", s1, "G1/1/1", "crossover"); L(mls, "G1/0/2", s2, "G1/1/1", "crossover"); L(mls, "G1/0/23", web, "G0", "copper"); L(mls, "G1/0/24", dns, "G0", "copper");
   L(s1, "G1/0/1", D("PC1", "pc", "10.1.10.11/24", "Office"), "Fa0", "copper"); L(s1, "G1/0/2", D("PC2", "pc", "10.1.10.12/24", "Office"), "Fa0", "copper"); L(s1, "G1/0/3", D("PH1", "phone", "", "Office"), "Switch", "copper");
   const ap = D("AP1", "ap", "SSID Corp", "Office", "C9120AXI");
   L(s2, "G1/0/1", ap, "G0", "copper"); L(s2, "G1/0/2", D("PRN1", "printer", "10.1.10.50/24", "Office"), "Fa0", "copper"); L(ap, "", D("LT1", "laptop", "DHCP", "Office"), "", "wireless");
@@ -1292,11 +1673,11 @@ function exampleWan() {
   const {s, D, L} = makeBuilder(); s.title = "Two sites over a WAN";
   const ny = D("R-NY", "router", "G0/0 10.1.1.1/24\nS0/0/0 10.0.0.1/30", "New York", "2911"), nj = D("R-NJ", "router", "G0/0 10.2.2.1/24\nS0/0/0 10.0.0.2/30", "New Jersey", "2911");
   const sny = D("SW-NY", "switch", "", "New York"), snj = D("SW-NJ", "switch", "", "New Jersey");
-  L(ny, "S0/0/0", nj, "S0/0/0", "serial"); L(ny, "G0/0", sny, "G0/1", "copper"); L(nj, "G0/0", snj, "G0/1", "copper");
+  L(ny, "S0/0/0", nj, "S0/0/0", "serialDCE"); L(ny, "G0/0", sny, "G0/1", "copper"); L(nj, "G0/0", snj, "G0/1", "copper");
   L(sny, "Fa0/1", D("PC-NY", "pc", "10.1.1.10/24", "New York"), "Fa0", "copper"); L(snj, "Fa0/1", D("PC-NJ", "pc", "10.2.2.10/24", "New Jersey"), "Fa0", "copper");
   return s;
 }
-function loadProject(s, msg) { commit(); const style = S.iconStyle; S = Object.assign(blank(), s); S.iconStyle = style || "cisco"; fixUid(); SEL = {kind: null, id: null}; CONNECT.from = null; arrange(S.dir || "LR", true); inspector(); if (msg) toast(msg); }
+function loadProject(s, msg) { commit(); const style = S.iconStyle; S = Object.assign(blank(), s); if (typeof initAll === "function") initAll(); S.iconStyle = style || "cisco"; fixUid(); SEL = {kind: null, id: null}; CONNECT.from = null; arrange(S.dir || "LR", true); inspector(); if (msg) toast(msg); }
 function closeMenus() { document.querySelectorAll("details.menu[open]").forEach(d => d.removeAttribute("open")); }
 document.addEventListener("click", e => { if (!e.target.closest("details.menu")) closeMenus(); });
 $("exLab").onclick = () => { closeMenus(); loadProject(exampleLab(), "Loaded Kalloo Lab 01"); };
@@ -1323,17 +1704,17 @@ function migrate(v) {
   const out = Object.assign(blank(), v);
   if (!out.iconStyle) out.iconStyle = "cisco";
   out.devices = v.devices.map((d, i) => { const type = TYPES[d.type] ? d.type : "pc"; return {id: d.id || "d" + (900 + i), name: d.name || "?", type, model: d.model ? d.model : TYPES[type].def, ip: d.ip != null ? d.ip : (d.info || ""), group: d.group || "", x: typeof d.x === "number" ? d.x : 0, y: typeof d.y === "number" ? d.y : 0}; });
-  out.links = v.links.filter(l => l.a && l.b).map((l, i) => ({id: l.id || "l" + (900 + i), a: l.a, b: l.b, pa: l.pa || "", pb: l.pb || "", cable: CABLES[l.cable] ? l.cable : "copper"}));
+  const legacy = {serial: "serialDCE", trunk: "crossover"};
+  out.devices.forEach((d, i) => { const o = v.devices[i]; for (const k of ["cfg", "startup", "host", "svc"]) if (o[k]) d[k] = o[k]; });
+  out.links = v.links.filter(l => l.a && l.b).map((l, i) => ({id: l.id || "l" + (900 + i), a: l.a, b: l.b, pa: l.pa || "", pb: l.pb || "", cable: legacy[l.cable] || (CABLES[l.cable] && !CABLES[l.cable].virtual ? l.cable : "copper")}));
+  out.notes = Array.isArray(v.notes) ? v.notes : [];
+  out.areas = Array.isArray(v.areas) ? v.areas : [];
   return out;
 }
 
 
 // ======================================================================= TOOLBAR
-$("cableSel").innerHTML = `<option value="auto">⚡ Auto cable</option>` + cableOptions("");
-$("cableSel").value = "auto";
-$("cableSel").onchange = () => status();
-$("mSelect").onclick = () => setMode("select");
-$("mConnect").onclick = () => setMode(MODE === "connect" ? "select" : "connect");
+document.querySelectorAll("#toolSeg [data-tool]").forEach(b => b.onclick = () => setMode(MODE === b.dataset.tool && b.dataset.tool !== "select" ? "select" : b.dataset.tool));
 $("arrLR").onclick = () => arrange("LR");
 $("arrTB").onclick = () => arrange("TB");
 $("undo").onclick = undo; $("redo").onclick = redo;
@@ -1341,6 +1722,39 @@ $("zIn").onclick = () => zoomBy(1.2); $("zOut").onclick = () => zoomBy(1 / 1.2);
 let toastTimer = null;
 function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2800); }
 
+// ---- Realtime / Simulation (the simulation engine fills these in)
+let SIMMODE = "realtime";
+const PDUS = [];   // {id, src, dst, status, type}
+function setSimMode(m) {
+  SIMMODE = m;
+  $("rtReal").classList.toggle("on", m === "realtime"); $("rtSim").classList.toggle("on", m === "simulation");
+  document.body.classList.toggle("simmode", m === "simulation");
+  if (typeof onSimModeChange === "function") onSimModeChange();
+  renderRt();
+}
+function renderRt() {
+  const body = $("rtBody");
+  if (typeof renderSimPanel === "function" && SIMMODE === "simulation") { renderSimPanel(body); return; }
+  body.innerHTML = `<table class="pdutbl"><tr><th>Fire</th><th>Last status</th><th>Source</th><th>Destination</th><th>Type</th><th></th></tr>${PDUS.map(p => `<tr><td><button class="mini" data-fire="${p.id}" title="Send again">▶</button></td><td class="${p.status === "Successful" ? "ok" : p.status === "Failed" ? "fail" : ""}">${esc(p.status || "—")}</td><td>${esc((byId(p.src) || {}).name || "?")}</td><td>${esc((byId(p.dst) || {}).name || "?")}</td><td>${esc(p.type)}</td><td><button class="mini" data-del="${p.id}" title="Delete">✕</button></td></tr>`).join("") || '<tr><td colspan="6" class="muted">No PDUs yet. Use ✉️ Add Simple PDU (P): click a source, then a destination.</td></tr>'}</table>`;
+  body.querySelectorAll("[data-fire]").forEach(b => b.onclick = () => firePdu(PDUS.find(p => p.id === b.dataset.fire)));
+  body.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { PDUS.splice(PDUS.findIndex(p => p.id === b.dataset.del), 1); renderRt(); });
+}
+$("rtReal").onclick = () => setSimMode("realtime");
+$("rtSim").onclick = () => setSimMode("simulation");
+let pduSeq = 1;
+function pduClick(d) {
+  if (!PDU_PICK.from) { PDU_PICK.from = d.id; toast(`Source: ${d.name}. Now click the destination.`); return; }
+  if (PDU_PICK.from === d.id) { PDU_PICK.from = null; $("gOverlay").innerHTML = ""; return; }
+  const p = {id: "p" + (pduSeq++), src: PDU_PICK.from, dst: d.id, status: "", type: "ICMP"};
+  PDU_PICK.from = null; $("gOverlay").innerHTML = "";
+  PDUS.push(p); firePdu(p);
+}
+function firePdu(p) {
+  if (!p) return;
+  if (typeof simPdu === "function") simPdu(p);
+  else { p.status = "Pending"; toast("Ping simulation arrives in Phase 4."); }
+  renderRt();
+}
 
 // ======================================================================= START
 (function start() {
@@ -1352,7 +1766,7 @@ function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("sh
     if (old && Array.isArray(old.devices) && old.devices.length) { S = migrate(old); layout = true; }
     else { S = exampleLab(); layout = true; }
   }
-  fixUid(); buildLegend(); buildPalette(); applyTheme(); updateUndo(); inspector(); outputs();
+  fixUid(); if (typeof initAll === "function") initAll(); buildLegend(); buildPalette(); applyTheme(); updateUndo(); inspector(); outputs(); renderRt();
   if (layout) arrange(S.dir || "LR", true); else requestAnimationFrame(fit);
   addEventListener("resize", () => { clearTimeout(start.t); start.t = setTimeout(fit, 150); });
 })();

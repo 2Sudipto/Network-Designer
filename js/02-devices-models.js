@@ -86,15 +86,32 @@ const MODELS = {
 const ALLMODELS = Object.entries(MODELS).flatMap(([t, series]) => series.flatMap(([s, ms]) => ms.map(m => Object.assign({type: t, series: s}, m))));
 const findModel = (type, name) => ALLMODELS.find(m => m.type === type && m.name === name);
 const PALETTE = [["Network", ["router", "switch", "l3switch", "firewall", "cloud", "hub"]], ["Wireless", ["ap", "wlc"]], ["End devices", ["pc", "laptop", "server", "printer", "phone", "tablet"]]];
+// Bottom dock categories, like Packet Tracer's device-type selection box
+const DOCK_CATS = [
+  {k: "routers",  label: "Routers",     icon: "router",   types: ["router"]},
+  {k: "switches", label: "Switches",    icon: "switch",   types: ["switch", "l3switch"]},
+  {k: "hubs",     label: "Hubs",        icon: "hub",      types: ["hub"]},
+  {k: "wireless", label: "Wireless",    icon: "ap",       types: ["ap", "wlc"]},
+  {k: "security", label: "Security",    icon: "firewall", types: ["firewall"]},
+  {k: "wan",      label: "WAN / Cloud", icon: "cloud",    types: ["cloud"]},
+  {k: "end",      label: "End Devices", icon: "pc",       types: ["pc", "laptop", "server", "printer", "phone", "tablet"]},
+  {k: "conn",     label: "Connections", icon: "cable",    cables: true},
+];
+// Cable types (Packet Tracer's Connections set). kinds = port kinds the cable can plug into.
 const CABLES = {
-  copper:    {label: "Copper straight-through", color: "#7d8796", w: 2,   dash: "",         lights: true},
-  crossover: {label: "Copper crossover",        color: "#2f7fe0", w: 2,   dash: "7 5",      lights: true},
-  fiber:     {label: "Fiber",                   color: "#f08a24", w: 2.6, dash: "",         lights: true},
-  trunk:     {label: "Trunk / EtherChannel",    color: "#8b46c9", w: 4.5, dash: "",         lights: true},
-  serial:    {label: "Serial (WAN)",            color: "#d6362b", w: 2.4, dash: "",         lights: true, zig: true},
-  wireless:  {label: "Wireless",                color: "#18a37f", w: 2,   dash: "2 6",      lights: false},
-  console:   {label: "Console (rollover)",      color: "#3aa7d6", w: 2,   dash: "10 4 2 4", lights: false},
+  auto:      {label: "Automatically Choose Connection Type", short: "Automatic", virtual: true},
+  console:   {label: "Console (rollover)",      short: "Console",     color: "#3aa7d6", w: 2,   dash: "10 4 2 4", lights: false, kinds: ["console", "rs232"]},
+  copper:    {label: "Copper Straight-Through", short: "Straight",    color: "#7d8796", w: 2,   dash: "",         lights: true,  kinds: ["eth"]},
+  crossover: {label: "Copper Cross-Over",       short: "Cross-Over",  color: "#7d8796", w: 2,   dash: "7 5",      lights: true,  kinds: ["eth"]},
+  fiber:     {label: "Fiber",                   short: "Fiber",       color: "#f08a24", w: 2.6, dash: "",         lights: true,  kinds: ["eth"]},
+  serialDCE: {label: "Serial DCE",              short: "Serial DCE",  color: "#d6362b", w: 2.4, dash: "",         lights: true,  kinds: ["serial"], zig: true, dce: true},
+  serialDTE: {label: "Serial DTE",              short: "Serial DTE",  color: "#d6362b", w: 2.4, dash: "",         lights: true,  kinds: ["serial"], zig: true},
+  wireless:  {label: "Wireless association",    short: "Wireless",    color: "#18a37f", w: 2,   dash: "2 6",      lights: false, kinds: ["wireless"]},
+  // legacy types from older projects (still drawn, not offered in the dock)
+  serial:    {label: "Serial (WAN)",            short: "Serial",      color: "#d6362b", w: 2.4, dash: "",         lights: true,  kinds: ["serial"], zig: true, legacy: true},
+  trunk:     {label: "Trunk (old projects)",    short: "Trunk",       color: "#8b46c9", w: 4.5, dash: "",         lights: true,  kinds: ["eth"], legacy: true},
 };
+const CABLE_LIST = Object.entries(CABLES).filter(([, c]) => !c.virtual && !c.legacy);
 const EMOJI = {router:"🔀",switch:"🔲",l3switch:"🔳",hub:"⬛",firewall:"🧱",cloud:"☁️",ap:"📶",wlc:"📡",pc:"💻",laptop:"💻",server:"🖥️",printer:"🖨️",phone:"☎️",tablet:"📱"};
 const MSHAPE = {router:["((", "))"], server:["[(", ")]"], cloud:["{{", "}}"], firewall:["[[", "]]"], ap:["([", "])"]};
 const GROUP_COLORS = ["#0a84ff", "#16a34a", "#d97706", "#9333ea", "#dc2626", "#0891b2"];

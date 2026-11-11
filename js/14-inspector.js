@@ -1,6 +1,6 @@
 // ======================================================================= INSPECTOR
 const typeOptions = sel => Object.entries(TYPES).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v.label)}</option>`).join("");
-const cableOptions = sel => Object.entries(CABLES).map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v.label)}</option>`).join("");
+const cableOptions = sel => [...CABLE_LIST, ...(CABLES[sel] && CABLES[sel].legacy ? [[sel, CABLES[sel]]] : [])].map(([k, v]) => `<option value="${k}"${k === sel ? " selected" : ""}>${esc(v.label)}</option>`).join("");
 const devOptions = sel => S.devices.map(d => `<option value="${esc(d.id)}"${d.id === sel ? " selected" : ""}>${esc(d.name)}</option>`).join("");
 function modelOptions(type, cur) {
   const known = !!findModel(type, cur);
@@ -42,7 +42,7 @@ function inspector() {
       <datalist id="groupList">${groups.map(g => `<option value="${esc(g)}"></option>`).join("")}</datalist>
       <div class="sect">Connections (${conns.length})</div>
       <ul class="conns">${conns.map(l => { const mine = l.a === d.id, o = byId(mine ? l.b : l.a); return `<li><button data-l="${esc(l.id)}"><span class="swatch" style="background:${(CABLES[l.cable] || CABLES.copper).color}"></span><span>${esc((mine ? l.pa : l.pb) || "—")} → <b>${esc(o ? o.name : "?")}</b> ${esc((mine ? l.pb : l.pa) || "")}</span></button></li>`; }).join("") || '<li class="muted" style="font-size:12.5px">None yet. Click Connect from here, then another device.</li>'}</ul>
-      <div class="btns"><button class="btn primary" id="iConn">🔌 Connect from here</button><button class="btn" id="iDup">Duplicate</button><button class="btn danger" id="iDel">Delete</button></div>`;
+      <div class="btns">${typeof openDeviceWindow === "function" ? '<button class="btn primary" id="iOpen">🪟 Open</button>' : ""}<button class="btn" id="iConn">🔌 Connect</button><button class="btn" id="iDup">Duplicate</button><button class="btn danger" id="iDel">Delete</button></div>`;
     el.querySelector("#iTitle").textContent = d.name;
     el.querySelector('[data-f="name"]').value = d.name;
     el.querySelector('[data-f="ip"]').value = d.ip || "";
@@ -60,6 +60,7 @@ function inspector() {
     el.querySelector("#iCustom").addEventListener("input", e => { if (EDITKEY !== "model") { commit(); EDITKEY = "model"; } d.model = e.target.value; scheduleRender(); save(); });
     el.querySelectorAll("[data-l]").forEach(b => b.onclick = () => select("link", b.dataset.l));
     el.querySelector("#iConn").onclick = () => startConnectFrom(d.id);
+    if (el.querySelector("#iOpen")) el.querySelector("#iOpen").onclick = () => openDeviceWindow(d);
     el.querySelector("#iDup").onclick = duplicateSel;
     el.querySelector("#iDel").onclick = deleteSel;
     return;
@@ -77,9 +78,33 @@ function inspector() {
     el.querySelector("#iTitle").textContent = `${a ? a.name : "?"} ↔ ${b ? b.name : "?"}`;
     el.querySelector('[data-f="pa"]').value = l.pa || "";
     el.querySelector('[data-f="pb"]').value = l.pb || "";
-    bindFields(el, l, f => { if (f === "a" || f === "b" || f === "cable") inspector(); });
+    bindFields(el, l, f => { if (f === "a" || f === "b" || f === "cable") inspector(); if (typeof onTopologyChange === "function") onTopologyChange(); });
     el.querySelector("#iSwap").onclick = () => { commit(); [l.a, l.b, l.pa, l.pb] = [l.b, l.a, l.pb, l.pa]; render(); inspector(); save(); };
-    el.querySelector("#iAuto").onclick = () => { commit(); const A = byId(l.a), B = byId(l.b); l.pa = ""; l.pb = ""; if (l.cable !== "wireless" && A && B) { l.pa = pickPort(A, B); l.pb = pickPort(B, A); } render(); inspector(); save(); };
+    el.querySelector("#iAuto").onclick = () => { commit(); const A = byId(l.a), B = byId(l.b); l.pa = ""; l.pb = ""; if (l.cable !== "wireless" && A && B) { l.pa = pickPort(A, B, l.cable); l.pb = pickPort(B, A, l.cable); } render(); inspector(); save(); };
+    el.querySelector("#iDel").onclick = deleteSel;
+    return;
+  }
+  if (SEL.kind === "note" && byNote(SEL.id)) {
+    const n = byNote(SEL.id);
+    el.innerHTML = `<div class="ih"><div class="ic note">📝</div><div><div class="it">Note</div><div class="is">Text on the workspace</div></div></div>
+      <label>Text<textarea data-f="text" rows="5"></textarea></label>
+      <div class="btns"><button class="btn danger" id="iDel">Delete note</button></div>`;
+    el.querySelector('[data-f="text"]').value = n.text;
+    bindFields(el, n);
+    el.querySelector("#iDel").onclick = deleteSel;
+    return;
+  }
+  if (SEL.kind === "area" && byArea(SEL.id)) {
+    const a = byArea(SEL.id);
+    el.innerHTML = `<div class="ih"><div class="ic" style="color:${a.color};font-size:26px">▭</div><div><div class="it">Area</div><div class="is">${a.w} × ${a.h}</div></div></div>
+      <label>Label<input data-f="label" autocomplete="off"></label>
+      <div class="sect">Colour</div>
+      <div class="swatches">${AREA_COLORS.map(c => `<button class="sw${c === a.color ? " on" : ""}" data-c="${c}" style="background:${c}" title="${c}"></button>`).join("")}</div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Drag the area to move it with the devices inside (hold Alt to move just the box). Drag the corner square to resize.</p>
+      <div class="btns"><button class="btn danger" id="iDel">Delete area</button></div>`;
+    el.querySelector('[data-f="label"]').value = a.label || "";
+    bindFields(el, a);
+    el.querySelectorAll("[data-c]").forEach(b => b.onclick = () => { commit(); a.color = b.dataset.c; render(); inspector(); save(); });
     el.querySelector("#iDel").onclick = deleteSel;
     return;
   }
@@ -92,19 +117,19 @@ function inspector() {
       <label><input type="checkbox" data-s="showModel"> Device models</label>
       <label><input type="checkbox" data-s="showIP"> IP addresses / notes</label>
       <label><input type="checkbox" data-s="showPorts"> Port names on cables</label>
-      <label><input type="checkbox" data-s="showLights"> Green link lights</label>
+      <label><input type="checkbox" data-s="showLights"> Link lights (green / orange / red)</label>
       <label><input type="checkbox" data-s="snap"> Snap to grid while dragging</label>
     </div>
     <div class="sect">How to use</div>
     <ol class="howto">
-      <li><b>Add:</b> drag a device from the left (search "2911", "9300"… for a specific model).</li>
-      <li><b>Cable:</b> press <kbd>C</kbd>, click two devices. Ports come from the model.</li>
-      <li><b>Edit:</b> click or right-click a device or cable.</li>
+      <li><b>Add:</b> pick a category in the bottom-left panel, then drag a model onto the workspace (or search "2911", "9300"…).</li>
+      <li><b>Cable:</b> open <b>Connections</b>, pick a cable (⚡ = automatic), click a device, choose a port, then the other device.</li>
+      <li><b>Configure:</b> double-click a device to open its window.</li>
       <li><b>Tidy:</b> Arrange lays it out as a neat tree.</li>
       <li><b>Export to Obsidian</b> (top right): copy the picture and/or the note text.</li>
     </ol>
     <div class="sect">Shortcuts</div>
-    <div class="keys"><kbd>V</kbd> select · <kbd>C</kbd> connect · <kbd>Del</kbd> delete · <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> undo/redo · <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate · <kbd>Ctrl</kbd>+<kbd>E</kbd> export · <kbd>F</kbd> fit · <kbd>Esc</kbd> cancel</div>`;
+    <div class="keys"><kbd>V</kbd> select · <kbd>C</kbd> connect · <kbd>I</kbd> inspect · <kbd>D</kbd> delete tool · <kbd>N</kbd> note · <kbd>A</kbd> area · <kbd>P</kbd> PDU · <kbd>Del</kbd> delete · <kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Y</kbd> undo/redo · <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate · <kbd>Ctrl</kbd>+<kbd>E</kbd> export · <kbd>F</kbd> fit · <kbd>Esc</kbd> cancel</div>`;
   const t = el.querySelector("#sTitle"); t.value = S.title || "";
   t.addEventListener("input", () => { if (EDITKEY !== "title") { commit(); EDITKEY = "title"; } S.title = t.value; save(); });
   el.querySelectorAll("[data-s]").forEach(cb => { cb.checked = S[cb.dataset.s] !== false; cb.addEventListener("change", () => { S[cb.dataset.s] = cb.checked; render(); save(); }); });

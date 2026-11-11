@@ -6,7 +6,7 @@ function exportSvg() {
   const x = Math.floor(b.x - pad), y = Math.floor(b.y - pad - th), w = Math.ceil(b.w + pad * 2), h = Math.ceil(b.h + pad * 2 + th);
   const title = th ? `<text x="${x + pad}" y="${y + 34}" font-size="20" font-weight="700" fill="${T.text}">${esc(S.title)}</text>` : "";
   const bg = EX.bg === "transparent" ? "" : `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${T.canvas}"/>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}" font-family="Segoe UI, system-ui, -apple-system, Arial, sans-serif"><defs>${DEFS}</defs>${bg}${title}${groupsSvg()}${S.links.map(l => linkSvg(l, true, T)).join("")}${S.devices.map(d => devSvg(d, true, T)).join("")}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${x} ${y} ${w} ${h}" font-family="Segoe UI, system-ui, -apple-system, Arial, sans-serif"><defs>${DEFS}</defs>${bg}${title}${areasSvg(true, T)}${groupsSvg()}${S.links.map(l => linkSvg(l, true, T)).join("")}${S.devices.map(d => devSvg(d, true, T)).join("")}${notesSvg(true, T)}</svg>`;
   return {svg, w, h};
 }
 const svgUrl = svg => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
