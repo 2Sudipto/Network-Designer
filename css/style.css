@@ -148,7 +148,7 @@ dialog.exp::backdrop{background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
 }
 
 /* ---------- Packet Tracer dock ---------- */
-.dock{grid-column:1/-1;display:grid;grid-template-columns:232px minmax(0,1fr) 360px;overflow:hidden}
+.dock{grid-column:1/-1;display:grid;grid-template-columns:232px minmax(0,1fr) 360px;grid-template-rows:minmax(0,1fr);overflow:hidden}
 .dcats{border-right:1px solid var(--border);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .dcgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}
 .dcat{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 2px;border:1px solid transparent;border-radius:9px;background:none;cursor:pointer;font-size:10px;line-height:1.1;color:var(--muted)}
@@ -166,11 +166,11 @@ dialog.exp::backdrop{background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
 .dtile.cab{cursor:pointer}
 .dtile.cab svg{width:56px;height:40px}
 .dlabel{border-top:1px solid var(--border);padding:4px 10px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:26px}
-.drt{border-left:1px solid var(--border);display:flex;flex-direction:column;min-width:0}
+.drt{border-left:1px solid var(--border);display:flex;flex-direction:column;min-width:0;min-height:0}
 .rtTabs{display:flex;border-bottom:1px solid var(--border)}
 .rtTab{flex:1;border:none;background:none;padding:7px 8px;cursor:pointer;font-weight:600;color:var(--muted);border-bottom:2px solid transparent}
 .rtTab.on{color:var(--accent);border-bottom-color:var(--accent)}
-.rtBody{flex:1;overflow:auto;padding:6px 8px;font-size:12px}
+.rtBody{flex:1;min-height:0;overflow:auto;padding:6px 8px;font-size:12px;display:flex;flex-direction:column}
 .pdutbl{width:100%;border-collapse:collapse;font-size:11.5px}
 .pdutbl th{text-align:left;color:var(--muted);font-weight:600;padding:3px 4px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel)}
 .pdutbl td{padding:3px 4px;border-bottom:1px solid var(--border);white-space:nowrap}
@@ -260,3 +260,26 @@ input.bad{border-color:var(--danger)!important;background:color-mix(in srgb,var(
 .browser iframe{flex:1;border:none;background:#fff;min-height:240px}
 .cfgsimple{padding:2px}
 @media (max-width:760px){.devwin{left:4px!important;right:4px;width:auto!important;top:60px!important}.cfg{grid-template-columns:1fr}.cfgnav{flex-direction:row;flex-wrap:wrap;border:none}}
+/* ---------- simulation */
+body.simmode #stage{box-shadow:0 0 0 2px #e5508f inset,var(--shadow)}
+body.simmode .hint::before{content:"🎞 SIMULATION · ";color:#e5508f;font-weight:700}
+.simbar{display:flex;align-items:center;gap:5px;padding:4px 2px 6px;flex-wrap:wrap}
+.simbar .play{min-width:30px;font-size:13px}
+.simspeed{width:70px}
+.simf{display:flex;gap:6px;flex-wrap:wrap;font-size:11px}
+.simf label{display:flex;align-items:center;gap:3px;cursor:pointer}
+.simf span{border-left:8px solid var(--c);padding-left:3px}
+.simlist{overflow:auto;flex:1;min-height:0}
+.simlist tr{cursor:pointer}
+.simlist tr.done td{color:var(--muted)}
+.simlist tr.sel td{background:var(--accent-soft);color:var(--text)}
+.pk{display:inline-block;width:10px;height:8px;background:var(--c);border-radius:2px;margin-right:5px;vertical-align:middle}
+.pduwin{min-width:380px;max-width:560px;z-index:90}
+.pduwin .popb{padding:6px 8px 8px}
+.osi{width:100%;border-collapse:collapse;font-size:12px}
+.osi th{text-align:left;color:var(--muted);padding:4px 8px 4px 2px;white-space:nowrap;vertical-align:top;width:64px}
+.osi td{padding:4px 2px;border-bottom:1px solid var(--border);font-family:Consolas,monospace;font-size:11.5px}
+.notes{margin:4px 0 6px 18px;padding:0;font-size:12px}
+.notes li{margin:2px 0}
+.rtBody{overflow:auto}
+body.simmode .layout{grid-template-rows:minmax(0,1fr) 236px}

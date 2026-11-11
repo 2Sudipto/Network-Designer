@@ -121,7 +121,8 @@ function iosPing(s, host) {
   let ok = 0;
   const seq = [];
   for (let k = 0; k < 5; k++) seq.push([k ? 280 : 80, () => {
-    const r = pingOnce(s.dev, ip, {seq: k}).res;
+    const R = pingOnce(s.dev, ip, {seq: k}); simCapture(s.dev, "ICMP", R.events);
+    const r = R.res;
     const ch = r.res === "reply" ? "!" : r.res === "unreach" ? "U" : r.res === "ttl" ? "&" : ".";
     if (ch === "!") ok++;
     T.print(ch);
@@ -139,7 +140,8 @@ function iosTrace(s, host) {
   let ttl = 1, done = false, miss = 0;
   const step = () => {
     if (done || ttl > 30 || miss >= 4 || T.cancel) { T.busy = false; T.cancel = false; T.refresh(); return; }
-    const r = pingOnce(s.dev, ip, {ttl}).res;
+    const R = pingOnce(s.dev, ip, {ttl}); simCapture(s.dev, "ICMP", R.events);
+    const r = R.res;
     const r2 = r.res ? r : pingOnce(s.dev, ip, {ttl}).res;
     if (r2.res === "reply" || r2.res === "ttl" || r2.res === "unreach") { T.print(`  ${String(ttl).padStart(2)}   ${pad(r2.from, 16)}0 msec    0 msec    1 msec\n`); miss = 0; if (r2.res !== "ttl") done = true; }
     else { T.print(`  ${String(ttl).padStart(2)}   *         *         *\n`); miss++; }
@@ -153,6 +155,7 @@ function remoteLogin(T, fromDev, ip, proto, user) {
   const port = proto === "ssh" ? 22 : 23;
   if (proto === "telnet") T.print(`Trying ${ip} ...`);
   const r = tcpConnect(fromDev, ip, port);
+  simCapture(fromDev, proto, r.events);
   if (!r.ok) {
     T.print(proto === "telnet" ? (r.refused ? "\n% Connection refused by remote host\n" : "\n% Connection timed out; remote host not responding\n") : (r.refused ? "% Connection refused by remote host\n" : "% Connection timed out; remote host not responding\n"));
     return null;

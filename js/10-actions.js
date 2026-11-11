@@ -139,7 +139,9 @@ const pop = document.createElement("div"); pop.className = "ctx inspop hidden"; 
 function hidePop() { pop.classList.add("hidden"); }
 function inspectDevice(d, ev) {
   const ports = allPorts(d).filter(p => portKind(p) !== "wireless" || d.type === "laptop" || d.type === "tablet");
-  const rows = ports.map(p => {
+  const used = ports.filter(p => S.links.some(x => (x.a === d.id && x.pa === p) || (x.b === d.id && x.pb === p)));
+  const empty = ports.length - used.length;
+  const rows = used.map(p => {
     const l = S.links.find(x => (x.a === d.id && x.pa === p) || (x.b === d.id && x.pb === p));
     let st = "—", nb = "";
     if (l) { const s = linkStatus(l), mine = l.a === d.id, o = byId(mine ? l.b : l.a); st = (mine ? s.a : s.b) || "up"; nb = `${o ? o.name : "?"} ${mine ? l.pb : l.pa}`; }
@@ -147,7 +149,7 @@ function inspectDevice(d, ev) {
     const cls = st === "up" ? "ok" : st === "block" ? "warn" : st === "—" ? "" : "fail";
     const lbl = st === "up" ? "up" : st === "block" ? "blocking" : st === "—" ? "not connected" : st;
     return `<tr><td>${esc(p)}</td><td class="${cls}">${esc(lbl)}</td><td>${esc(nb)}</td></tr>`;
-  }).join("");
+  }).join("") + (empty ? `<tr><td colspan="3" class="muted">${used.length ? "+ " : ""}${empty} empty port${empty === 1 ? "" : "s"}</td></tr>` : "");
   const extra = typeof inspectExtra === "function" ? inspectExtra(d) : "";
   pop.innerHTML = `<div class="ct">${esc(d.name)} · ${esc(d.model)}</div><div class="popb"><table class="pdutbl"><tr><th>Port</th><th>Status</th><th>Connected to</th></tr>${rows}</table>${extra}</div>`;
   pop.classList.remove("hidden");

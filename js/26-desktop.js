@@ -115,7 +115,8 @@ function pcShell(d) {
         let ttl = 1, miss = 0; const T = sh.term; T.busy = true; T.refresh();
         const step = () => {
           if (ttl > 30 || miss >= 4 || T.cancel) { T.print("\nTrace complete.\n"); T.busy = false; T.cancel = false; T.refresh(); return; }
-          let r = pingOnce(d, ip, {ttl}).res; if (!r.res) r = pingOnce(d, ip, {ttl}).res;
+          const R = pingOnce(d, ip, {ttl}); simCapture(d, "ICMP", R.events);
+          let r = R.res; if (!r.res) r = pingOnce(d, ip, {ttl}).res;
           if (r.res) { T.print(`  ${String(ttl).padStart(2)}   0 ms      0 ms      0 ms      ${r.from}\n`); miss = 0; if (r.res !== "ttl") ttl = 99; }
           else { T.print(`  ${String(ttl).padStart(2)}   *         *         *         Request timed out.\n`); miss++; }
           ttl++; setTimeout(step, 450);
