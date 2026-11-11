@@ -8,7 +8,7 @@
     if (old && Array.isArray(old.devices) && old.devices.length) { S = migrate(old); layout = true; }
     else { S = exampleLab(); layout = true; }
   }
-  fixUid(); if (typeof initAll === "function") initAll(); buildLegend(); buildPalette(); applyTheme(); updateUndo(); inspector(); outputs(); renderRt();
+  fixUid(); initAll(); buildLegend(); buildPalette(); applyTheme(); updateUndo(); inspector(); outputs(); renderRt(); autoDhcp();
   if (layout) arrange(S.dir || "LR", true); else requestAnimationFrame(fit);
   addEventListener("resize", () => { clearTimeout(start.t); start.t = setTimeout(fit, 150); });
 })();

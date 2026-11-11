@@ -199,3 +199,64 @@ dialog.exp::backdrop{background:rgba(8,12,20,.55);backdrop-filter:blur(2px)}
 .mini{border:1px solid var(--border);background:var(--panel2);border-radius:6px;padding:1px 6px;cursor:pointer;font-size:11px;color:var(--text)}
 .mini:hover{border-color:var(--accent);color:var(--accent)}
 #cv.tool-delete [data-note],#cv.tool-delete [data-area]{cursor:not-allowed}
+/* ---------- device windows */
+.devwin{position:fixed;width:680px;height:520px;min-width:420px;min-height:320px;background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:var(--pop);display:flex;flex-direction:column;overflow:hidden;resize:both}
+.dwh{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--border);cursor:move;user-select:none;background:var(--panel2)}
+.dwh .dwi svg{width:30px;height:24px;display:block}
+.dwh b{font-size:14px}
+.grow{flex:1}
+.dwtabs{padding:0 10px;border-bottom:1px solid var(--border);display:flex;gap:2px}
+.dwb{flex:1;min-height:0;position:relative}
+.dwp{position:absolute;inset:0;overflow:auto;padding:12px;display:flex;flex-direction:column}
+.dwp.termwrap,.termwrap{padding:0}
+.term{flex:1;min-height:0;background:#0b0f14;color:#e6e6e6;font:13px/1.35 Consolas,"Cascadia Mono","Courier New",monospace;overflow:auto;padding:10px 12px;cursor:text}
+.term .tout{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit}
+.term .tline{display:flex;white-space:pre}
+.term .tprompt{white-space:pre}
+.term .tin{flex:1;background:transparent;border:none;outline:none;color:inherit;font:inherit;padding:0;margin:0;caret-color:#e6e6e6;min-width:20px;height:auto}
+.term.busy .tin{caret-color:transparent}
+.termwrap{flex:1;min-height:0;display:flex;flex-direction:column}
+.appp.termwrap{height:100%}
+.phys{display:flex;flex-direction:column;gap:10px}
+.chassis{width:100%;max-height:260px}
+.physlist{margin:6px 0 0;padding-left:18px;font-size:12.5px}
+.cfg{display:grid;grid-template-columns:170px 1fr;gap:12px;flex:1;min-height:0}
+.cfgnav{border-right:1px solid var(--border);overflow:auto;padding-right:6px;display:flex;flex-direction:column;gap:1px}
+.cfgh{font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin:8px 4px 3px}
+.cfgi{text-align:left;border:none;background:none;padding:5px 8px;border-radius:7px;cursor:pointer;color:var(--text);font-size:12.5px}
+.cfgi:hover{background:var(--accent-soft)}
+.cfgi.on{background:var(--accent);color:#fff}
+.cfgbody{overflow:auto;padding-right:4px}
+.cfgbody h4,.cfgsimple h4{margin:2px 0 10px;font-size:15px}
+.cfgbody label,.cfgsimple label,.ipc label{display:block;font-size:12px;color:var(--muted);margin:8px 0 0}
+.cfgbody input,.cfgbody select,.cfgbody textarea,.cfgsimple input,.ipc input{display:block;width:100%;margin-top:3px}
+.cfgbody .chk.inline{display:flex;gap:8px;align-items:center;color:var(--text);font-size:13px}
+.cfgbody .chk.inline input{width:auto;margin:0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pair3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.cfglist{list-style:none;padding:0;margin:8px 0 0;font-size:12.5px}
+.cfglist li{display:flex;justify-content:space-between;align-items:center;padding:5px 6px;border-bottom:1px solid var(--border)}
+.eqh{font-size:11px;font-weight:700;color:var(--muted);margin:10px 0 4px;letter-spacing:.04em;text-transform:uppercase}
+.eqlog{height:92px;flex:0 0 92px;overflow:auto;margin:0;background:#0b0f14;color:#cfe3ff;font:12px/1.35 Consolas,monospace;padding:6px 8px;border-radius:8px;white-space:pre-wrap}
+.onoff{margin-bottom:6px}
+.desk{display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;padding:6px}
+.apps{display:flex;flex-wrap:wrap;gap:14px}
+.app{width:104px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 6px;border:1px solid var(--border);border-radius:12px;background:var(--panel2);cursor:pointer;font-size:12px;color:var(--text)}
+.app:hover{border-color:var(--accent);background:var(--accent-soft)}
+.app svg{width:48px;height:48px}
+.appwin{flex:1;min-height:0;display:flex;flex-direction:column;margin:-12px}
+.apph{display:flex;align-items:center;gap:10px;padding:6px 10px;border-bottom:1px solid var(--border)}
+.appb{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto}
+.appp{flex:1;min-height:0;display:flex;flex-direction:column}
+.ipc{padding:12px 14px;max-width:420px}
+.ipc .radios{display:flex;gap:16px;align-items:center;font-size:13px}
+.ipc .radios label{display:flex;gap:5px;align-items:center;margin:0;color:var(--text)}
+.ipc .radios input{width:auto;margin:0}
+input.bad{border-color:var(--danger)!important;background:color-mix(in srgb,var(--danger) 8%,transparent)}
+.termcfg{font-size:11.5px;padding:6px 10px;border-bottom:1px solid var(--border)}
+.browser{display:flex;flex-direction:column;flex:1;min-height:0}
+.browser .url{display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid var(--border)}
+.browser .url input{flex:1}
+.browser iframe{flex:1;border:none;background:#fff;min-height:240px}
+.cfgsimple{padding:2px}
+@media (max-width:760px){.devwin{left:4px!important;right:4px;width:auto!important;top:60px!important}.cfg{grid-template-columns:1fr}.cfgnav{flex-direction:row;flex-wrap:wrap;border:none}}

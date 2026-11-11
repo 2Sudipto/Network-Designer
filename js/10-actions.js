@@ -100,7 +100,7 @@ function startConnectFrom(id) { if (CABLE !== "auto") CABLE = "auto"; setMode("c
 // ---- delete / duplicate
 function deleteItem(kind, id) {
   commit();
-  if (kind === "dev") { S.links = S.links.filter(l => l.a !== id && l.b !== id); S.devices = S.devices.filter(d => d.id !== id); }
+  if (kind === "dev") { S.links = S.links.filter(l => l.a !== id && l.b !== id); S.devices = S.devices.filter(d => d.id !== id); if (typeof closeDeviceWindow === "function") closeDeviceWindow(id); }
   else if (kind === "link") S.links = S.links.filter(l => l.id !== id);
   else if (kind === "note") S.notes = S.notes.filter(n => n.id !== id);
   else if (kind === "area") S.areas = S.areas.filter(a => a.id !== id);

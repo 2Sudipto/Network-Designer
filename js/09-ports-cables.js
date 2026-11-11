@@ -59,7 +59,8 @@ function portBlocked(dev, port) { return typeof stpBlocked === "function" ? stpB
 function linkStatus(l) {
   const a = byId(l.a), b = byId(l.b), c = CABLES[l.cable] || CABLES.copper;
   if (!a || !b || !c.lights) return {up: true, a: null, b: null};
-  const up = portAdminUp(a, l.pa) && portAdminUp(b, l.pb) && cableFits(l);
+  let up = portAdminUp(a, l.pa) && portAdminUp(b, l.pb) && cableFits(l);
+  if (up && typeof serialProtoUp === "function" && portKind(l.pa) === "serial") up = serialProtoUp(a, l.pa);
   const st = (dev, port) => !up ? "down" : portBlocked(dev, port) ? "block" : "up";
   return {up, a: st(a, l.pa), b: st(b, l.pb)};
 }

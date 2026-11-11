@@ -50,12 +50,12 @@ function inspector() {
     el.querySelector("#iCustom").value = known ? "" : (d.model || "");
     bindFields(el, d, (f, v) => {
       if (f === "name") el.querySelector("#iTitle").textContent = v;
-      if (f === "type") { d.model = TYPES[v].def; inspector(); buildPaletteIfStyle(); }
+      if (f === "type") { d.model = TYPES[v].def; delete d.cfg; delete d.host; delete d.svc; delete d.startup; if (typeof initDevice === "function") initDevice(d); if (typeof closeDeviceWindow === "function") closeDeviceWindow(d.id); inspector(); }
     });
     el.querySelector("#iModel").addEventListener("change", e => {
       commit(); EDITKEY = null;
       if (e.target.value === "__custom") { el.querySelector("#iCustom").classList.remove("hidden"); el.querySelector("#iCustom").focus(); return; }
-      d.model = e.target.value; render(); inspector(); save();
+      d.model = e.target.value; if (typeof initDevice === "function") initDevice(d); render(); inspector(); save();
     });
     el.querySelector("#iCustom").addEventListener("input", e => { if (EDITKEY !== "model") { commit(); EDITKEY = "model"; } d.model = e.target.value; scheduleRender(); save(); });
     el.querySelectorAll("[data-l]").forEach(b => b.onclick = () => select("link", b.dataset.l));
