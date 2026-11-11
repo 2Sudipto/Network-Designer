@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Network Simulator</title>
+<meta name="description" content="A Packet Tracer-style network simulator for CCNA practice: build topologies, configure devices with an IOS-like CLI, ping, and export to Obsidian.">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs id="sharedDefs"></defs></svg>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-2.5a2.5 2.5 0 0 1 2.5-2.5h9a2.5 2.5 0 0 1 2.5 2.5V17"/></svg></div>
+    <div><b>Network Simulator</b><span>Packet Tracer-style · build, configure, ping, export to Obsidian</span></div>
+  </div>
+  <div class="tools">
+    <div class="seg" role="group" aria-label="Tools" id="toolSeg">
+      <button class="btn on" data-tool="select" title="Select and move (V / Esc)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 7.5-6.2 1.8L10 19z"/></svg>Select</button>
+      <button class="btn icon" data-tool="inspect" title="Inspect a device: tables and port status (I)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.3-4.3"/></svg></button>
+      <button class="btn icon" data-tool="delete" title="Delete: click a device, cable, note or area (D)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+      <button class="btn icon" data-tool="note" title="Place a text note (N)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12l-4 4H4z"/><path d="M8 9h8M8 13h5"/></svg></button>
+      <button class="btn icon" data-tool="area" title="Draw an area / box (A)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" stroke-dasharray="3 2"/></svg></button>
+      <button class="btn icon" data-tool="pdu" title="Add Simple PDU: click a source, then a destination (P)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="1.5"/><path d="M3 7l9 6 9-6"/></svg></button>
+    </div>
+    <span class="sep"></span>
+    <button class="btn" id="arrLR" title="Auto-arrange left → right"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><rect x="16" y="15" width="6" height="6" rx="1"/><path d="M8 12h4M12 6v12M12 6h4M12 18h4"/></svg>Arrange</button>
+    <button class="btn icon" id="arrTB" title="Auto-arrange top → bottom"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="3" y="16" width="6" height="6" rx="1"/><rect x="15" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M6 12h12M6 12v4M18 12v4"/></svg></button>
+    <span class="sep"></span>
+    <button class="btn icon" id="undo" title="Undo (Ctrl+Z)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="btn icon" id="redo" title="Redo (Ctrl+Y)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <span class="sep"></span>
+    <details class="menu" id="menuProject">
+      <summary class="btn"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Project</summary>
+      <div class="dd">
+        <button id="exLab"><span>🦷</span><span>Example: Kalloo Lab 01<small>Edison Smiles Dental</small></span></button>
+        <button id="exLan"><span>🏠</span><span>Example: small LAN<small>Router, switch, 3 PCs</small></span></button>
+        <button id="exCo"><span>🏢</span><span>Example: small company<small>Internet, firewall, core switch, Wi-Fi, servers</small></span></button>
+        <button id="exWan"><span>🌐</span><span>Example: two sites over a WAN<small>Serial link, OSPF-style lab</small></span></button>
+        <hr>
+        <button id="saveJson"><span>💾</span><span>Save project file<small>.json you can open again later</small></span></button>
+        <button id="openJson"><span>📂</span><span>Open project file</span></button>
+        <hr>
+        <button id="newDiag"><span>🗒️</span><span>New empty diagram<small>Undo brings the old one back</small></span></button>
+      </div>
+    </details>
+    <button class="btn icon" id="themeBtn" title="Theme: auto / light / dark"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    <button class="btn primary" id="openExport" title="Export (Ctrl+E)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Export to Obsidian</button>
+    <input type="file" id="file" accept=".json,application/json" class="hidden">
+  </div>
+</header>
+
+<main class="layout">
+  <section class="stage card" id="stage">
+    <svg id="cv" font-family="Segoe UI, system-ui, -apple-system, Arial, sans-serif" aria-label="Network diagram canvas">
+      <defs><pattern id="gridPat" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" style="fill:var(--grid)"/></pattern></defs>
+      <g id="world">
+        <rect x="-20000" y="-20000" width="40000" height="40000" fill="url(#gridPat)"/>
+        <g id="gGroups"></g><g id="gLinks"></g><g id="gDevs"></g><g id="gOverlay"></g>
+      </g>
+    </svg>
+    <div class="legend" id="legend"></div>
+    <div class="empty hidden" id="empty"><div><b>Drag a device from the bottom panel to start</b>or open Project ▾ → an example</div></div>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="hint" id="hint"></div>
+    <div class="zoombar">
+      <button class="btn icon" id="zOut" title="Zoom out (−)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+      <output id="zoomInfo">100%</output>
+      <button class="btn icon" id="zIn" title="Zoom in (+)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></svg></button>
+      <button class="btn icon" id="zFit" title="Fit diagram (F)"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </section>
+  <aside class="inspector card" id="insp" aria-label="Properties"></aside>
+  <section class="dock card" id="dock" aria-label="Device and cable chooser">
+    <div class="dcats">
+      <div class="dcgrid" id="dcats"></div>
+      <input id="psearch" type="search" placeholder="Search model…" aria-label="Search devices or models" autocomplete="off">
+    </div>
+    <div class="dstrip">
+      <div class="dtiles" id="dtiles"></div>
+      <div class="dlabel" id="dlabel">Pick a category, then drag a device onto the workspace</div>
+    </div>
+    <div class="drt">
+      <div class="rtTabs" role="tablist">
+        <button class="rtTab on" id="rtReal" data-m="realtime" title="Realtime mode">⏱ Realtime</button>
+        <button class="rtTab" id="rtSim" data-m="simulation" title="Simulation mode">🎞 Simulation</button>
+      </div>
+      <div class="rtBody" id="rtBody"></div>
+    </div>
+  </section>
+</main>
+
+<section class="bottom card">
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-t="qa">⚡ Quick add</button>
+    <button class="tab" data-t="cab">🔗 Cabling table</button>
+    <button class="tab" data-t="addr">🌐 Addressing table</button>
+    <button class="tab" data-t="dev">🧾 Device list</button>
+    <button class="tab" data-t="mer">🧩 Mermaid code</button>
+    <span class="grow"></span>
+    <button class="btn hidden" id="copyOut">Copy this</button>
+  </div>
+  <div id="pane-qa">
+    <div class="qa">
+      <label>How many<input id="qaN" type="number" min="1" max="48" value="3"></label>
+      <label>Name prefix<input id="qaName" placeholder="e.g. ES-FR-PC" value="PC"></label>
+      <label>Device type<select id="qaType"></select></label>
+      <label>Connect to<select id="qaTo"></select></label>
+      <label>First port<input id="qaPort" placeholder="auto, or e.g. Fa0/1"></label>
+      <button class="btn primary" id="qaGo">Add</button>
+    </div>
+    <div class="row"><label class="muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="qaLetters" checked> Name them A, B, C… (untick for 1, 2, 3…)</label></div>
+    <p class="muted" style="margin:8px 0 0;font-size:12.5px">Example: 3 × "ES-FR-PC" on ES-FRONT from Fa0/1 → ES-FR-PCA on Fa0/1, ES-FR-PCB on Fa0/2, ES-FR-PCC on Fa0/3.</p>
+  </div>
+  <div id="pane-out" class="hidden">
+    <pre class="out" id="out"></pre>
+    <p class="muted" id="outNote" style="font-size:12.5px;margin:8px 0 0"></p>
+  </div>
+</section>
+
+<div class="ctx hidden" id="ctx" role="menu"></div>
+<div class="ctx portpick hidden" id="portpick" role="menu"></div>
+
+<dialog class="exp" id="exportDlg" aria-labelledby="exTitle">
+  <div class="exh">
+    <h2 id="exTitle">Export to Obsidian</h2>
+    <button class="btn icon" id="exClose" title="Close (Esc)" aria-label="Close"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="exb">
+    <div class="prev"><img id="exPrev" alt="Diagram preview"></div>
+    <div class="exo">
+      <div class="tabs" id="exTabs">
+        <button class="tab on" data-x="pic">🖼️ Picture</button>
+        <button class="tab" data-x="obs">📝 Note text</button>
+      </div>
+      <div id="x-pic">
+        <h4>Background</h4>
+        <div class="seg" id="exBg"><button class="btn on" data-v="light">Light</button><button class="btn" data-v="dark">Dark</button><button class="btn" data-v="transparent">Transparent</button></div>
+        <h4>Size</h4>
+        <div class="seg" id="exScale"><button class="btn" data-v="1">1×</button><button class="btn on" data-v="2">2× (sharp)</button><button class="btn" data-v="3">3× (print)</button></div>
+        <label class="chk"><input type="checkbox" id="exTitleChk" checked><span><b>Show the title</b><small>Set it in the right panel when nothing is selected</small></span></label>
+        <div class="row" style="margin-top:14px">
+          <button class="btn primary big" id="exCopyImg">📋 Copy picture</button>
+          <button class="btn" id="exPng">Download PNG</button>
+          <button class="btn" id="exSvg">Download SVG</button>
+        </div>
+        <ol class="steps"><li>Click <b>Copy picture</b>.</li><li>In your Obsidian lab note, click where it should go and press <kbd>Ctrl</kbd>+<kbd>V</kbd>.</li><li>Obsidian saves it in your attachments folder automatically.</li></ol>
+      </div>
+      <div id="x-obs" class="hidden">
+        <p class="muted" style="margin:0;font-size:12.5px">Choose what goes into your note, then copy it all at once.</p>
+        <label class="chk"><input type="checkbox" data-o="heading" checked><span><b>"## Topology" heading</b></span></label>
+        <label class="chk"><input type="checkbox" data-o="mermaid" checked><span><b>Diagram as Mermaid code</b><small>Draws in Obsidian with emoji icons. For the real device pictures, also paste the picture.</small></span></label>
+        <label class="chk"><input type="checkbox" data-o="cabling" checked><span><b>Cabling table</b><small>From · Port · To · Port · Cable</small></span></label>
+        <label class="chk"><input type="checkbox" data-o="addressing" checked><span><b>Addressing table</b><small>Built from each device's IP lines (e.g. "G0/0 192.168.1.1/24")</small></span></label>
+        <label class="chk"><input type="checkbox" data-o="devices"><span><b>Device list</b><small>Name · Type · Model · Group</small></span></label>
+        <textarea id="exText" readonly aria-label="Text that will be copied"></textarea>
+        <div class="row">
+          <button class="btn primary big" id="exCopyText">📋 Copy for Obsidian</button>
+          <button class="btn" id="exCopyBoth" title="Copies the text; also downloads the picture to drag in">Text + picture file</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- scripts:start -->
+<script src="js/00-head.js"></script>
+<script src="js/01-artwork.js"></script>
+<script src="js/02-devices-models.js"></script>
+<script src="js/03-state.js"></script>
+<script src="js/04-history-save.js"></script>
+<script src="js/05-theme.js"></script>
+<script src="js/06-geometry.js"></script>
+<script src="js/07-drawing.js"></script>
+<script src="js/08-view.js"></script>
+<script src="js/09-ports-cables.js"></script>
+<script src="js/10-actions.js"></script>
+<script src="js/11-auto-layout.js"></script>
+<script src="js/12-pointer-keyboard-context-menu.js"></script>
+<script src="js/13-palette.js"></script>
+<script src="js/14-inspector.js"></script>
+<script src="js/15-text-outputs.js"></script>
+<script src="js/16-export.js"></script>
+<script src="js/17-examples-project.js"></script>
+<script src="js/18-toolbar.js"></script>
+<script src="js/19-start.js"></script>
+<!-- scripts:end -->
+</body>
+</html>
