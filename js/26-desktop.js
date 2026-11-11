@@ -95,7 +95,7 @@ function pcShell(d) {
       let n = 4; const i = args.indexOf("-n"); if (i >= 0) { n = Math.min(20, +args[i + 1] || 4); args.splice(i, 2); }
       const host = args[0]; if (!host) { P("Usage: ping [-n count] target"); return; }
       resolve(host, ip => {
-        P(`\nPinging ${ip} with 32 bytes of data:\n`);
+        P(`\nPinging ${host !== ip ? host + " [" + ip + "]" : ip} with 32 bytes of data:\n`);
         let ok = 0; const steps = [];
         for (let k = 0; k < n; k++) steps.push([k ? 700 : 300, () => {
           const r = pingOnce(d, ip, {seq: k}); if (typeof simCapture === "function") simCapture(d, "ICMP", r.events, ip);
@@ -111,7 +111,8 @@ function pcShell(d) {
     tracert: args => {
       const host = args[0]; if (!host) { P("Usage: tracert target"); return; }
       resolve(host, ip => {
-        P(`\nTracing route to ${ip} over a maximum of 30 hops: \n`);
+        P(`\nTracing route to ${host !== ip ? host + " [" + ip + "]" : ip}
+over a maximum of 30 hops: \n`);
         let ttl = 1, miss = 0; const T = sh.term; T.busy = true; T.refresh();
         const step = () => {
           if (ttl > 30 || miss >= 4 || T.cancel) { T.print("\nTrace complete.\n"); T.busy = false; T.cancel = false; T.refresh(); return; }

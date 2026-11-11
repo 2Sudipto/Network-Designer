@@ -367,7 +367,7 @@ let WAIT = null;     // what the originating device is waiting for
 function deliver(d, iface, p) {
   if (p.proto === "icmp") {
     const ic = p.icmp;
-    if (ic.type === "echo") { note(`${d.name} answers the echo request`); ipOut(d, {src: p.dst === "255.255.255.255" ? iface.ip : p.dst, dst: p.src, ttl: 255, proto: "icmp", icmp: {type: "reply", id: ic.id, seq: ic.seq}}); return; }
+    if (ic.type === "echo") { note(`${d.name} answers the echo request`); ipOut(d, {src: p.dst === "255.255.255.255" ? iface.ip : p.dst, dst: p.src, ttl: isHost(d) ? 128 : 255, proto: "icmp", icmp: {type: "reply", id: ic.id, seq: ic.seq}}); return; }
     if (WAIT && WAIT.dev === d.id && ic.id === WAIT.id) { WAIT.res = ic.type; WAIT.from = p.src; WAIT.ttl = p.ttl; note(`${d.name} receives ICMP ${ic.type === "reply" ? "echo reply" : ic.type === "ttl" ? "time exceeded" : "unreachable"} from ${p.src}`); }
     return;
   }
