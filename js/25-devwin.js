@@ -6,11 +6,12 @@ function openDeviceWindow(d, tab) {
   if (!d) return;
   if (WINS[d.id]) { const w = WINS[d.id]; w.el.style.zIndex = ++WIN_Z; if (tab) showTab(w, tab); return w; }
   initDevice(d);
-  const tabs = isIOS(d) ? ["Physical", "Config", "CLI"] : isHost(d) ? (d.type === "server" ? ["Physical", "Config", "Services", "Desktop"] : ["Physical", "Config", "Desktop"]) : ["Physical"];
+  const tabs = isFw(d) ? ["Physical", "Firewall Manager", "CLI"] : isIOS(d) ? ["Physical", "Config", "CLI"] : isHost(d) ? (d.type === "server" ? ["Physical", "Config", "Services", "Desktop"] : ["Physical", "Config", "Desktop"]) : ["Physical"];
   const el = document.createElement("div");
   el.className = "devwin";
   const k = WIN_N++ % 6;
-  el.style.left = Math.min(innerWidth - 680, 120 + k * 34) + "px"; el.style.top = Math.min(innerHeight - 520, 70 + k * 30) + "px"; el.style.zIndex = ++WIN_Z;
+  if (isFw(d)) { el.classList.add("fwwin"); el.style.width = Math.min(innerWidth - 16, 1040) + "px"; el.style.height = Math.min(innerHeight - 24, 680) + "px"; }
+  el.style.left = Math.max(8, Math.min(innerWidth - (isFw(d) ? Math.min(innerWidth - 16, 1040) + 8 : 680), 120 + k * 34)) + "px"; el.style.top = Math.max(8, Math.min(innerHeight - (isFw(d) ? Math.min(innerHeight - 24, 680) + 8 : 520), 70 + k * 30)) + "px"; el.style.zIndex = ++WIN_Z;
   el.innerHTML = `<div class="dwh"><span class="dwi">${iconSvg(d.type)}</span><b class="dwt"></b><span class="grow"></span><button class="btn icon dwx" title="Close" aria-label="Close"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="tabs dwtabs">${tabs.map(t => `<button class="tab" data-t="${t}">${t}</button>`).join("")}</div>
     <div class="dwb">${tabs.map(t => `<div class="dwp hidden" data-p="${t}"></div>`).join("")}</div>`;
@@ -31,7 +32,7 @@ function openDeviceWindow(d, tab) {
     const up = () => { head.removeEventListener("pointermove", mv); head.removeEventListener("pointerup", up); };
     head.addEventListener("pointermove", mv); head.addEventListener("pointerup", up);
   });
-  showTab(w, tab || (isIOS(d) ? "CLI" : isHost(d) ? "Desktop" : "Physical"));
+  showTab(w, tab === "Config" && isFw(d) ? "Firewall Manager" : tab || (isFw(d) ? "Firewall Manager" : isIOS(d) ? "CLI" : isHost(d) ? "Desktop" : "Physical"));
   return w;
 }
 function showTab(w, t) {
@@ -46,6 +47,7 @@ function showTab(w, t) {
 function renderPane(w, t, pane) {
   pane = pane || w.el.querySelector(`.dwp[data-p="${t}"]`);
   if (t === "Physical") pane.innerHTML = physicalHtml(w.dev);
+  else if (t === "Firewall Manager") buildFwGui(w, pane);
   else if (t === "Config") isIOS(w.dev) ? buildIosConfig(w, pane) : buildHostConfig(w, pane);
   else if (t === "Services") buildServices(w, pane);
 }
@@ -56,13 +58,36 @@ function refreshDevWins(d, fromCli) {
     w.el.querySelector(".dwt").textContent = w.dev.name;
     if (w.tab === "Physical") renderPane(w, "Physical");
     if (w.tab === "Config" && w.dev === d && fromCli) renderPane(w, "Config");
+    if (w.tab === "Firewall Manager" && w.dev === d && fromCli && !w.fwBusy) { w.fwBusy = true; setTimeout(() => { w.fwBusy = false; if (WINS[w.dev.id] === w && w.tab === "Firewall Manager") buildFwGui(w); }, 0); }
   }
 }
 // ---- the CLI tab is the device's console port
 function makeConsole(pane, d) {
   pane.classList.add("termwrap");
   const T = createTerminal(pane, {onIdleEnter: () => startIOS(T, d, "console")});
-  T.print(`${d.type === "router" ? "System Bootstrap, Version 15.1(4)M4, RELEASE SOFTWARE (fc1)\nCopyright (c) 2010 by cisco Systems, Inc.\n\n" : "C2960 Boot Loader (C2960-HBOOT-M) Version 12.2(25r)FX, RELEASE SOFTWARE (fc4)\n\n"}cisco ${d.model} processor with 491520K/32768K bytes of memory.\n\n${d.startup ? "" : "         --- System Configuration Dialog ---\n\nWould you like to enter the initial configuration dialog? [yes/no]: no\n\n"}Press RETURN to get started!\n\n`);
+  if (isFw(d)) T.print(`Rebooting....
+
+Cisco Systems ROMMON Version (1.1.8) #0: Thu Dec 28 13:42:35 PST 2017
+
+Platform ${d.model.replace(/ /g, "")} with ${d.model.startsWith("FPR") ? 8192 : 4096} Mbytes of main memory
+Booting disk0:/asa${asaVer(d).replace(/\D/g, "")}-lfbff-k8.SPA...
+
+Loading...
+
+Cisco Adaptive Security Appliance Software Version ${asaVer(d)}
+
+  ****************************** Warning *******************************
+  This product contains cryptographic features and is
+  subject to United States and local country laws
+  governing, import, export, transfer, and use.
+  **********************************************************************
+
+${d.startup ? "" : "INFO: Converting to factory-default configuration.\n\n"}Type help or '?' for a list of available commands.
+
+Press RETURN to get started!
+
+`);
+  else T.print(`${d.type === "router" ? "System Bootstrap, Version 15.1(4)M4, RELEASE SOFTWARE (fc1)\nCopyright (c) 2010 by cisco Systems, Inc.\n\n" : "C2960 Boot Loader (C2960-HBOOT-M) Version 12.2(25r)FX, RELEASE SOFTWARE (fc4)\n\n"}cisco ${d.model} processor with 491520K/32768K bytes of memory.\n\n${d.startup ? "" : "         --- System Configuration Dialog ---\n\nWould you like to enter the initial configuration dialog? [yes/no]: no\n\n"}Press RETURN to get started!\n\n`);
   T.refresh();
   return T;
 }

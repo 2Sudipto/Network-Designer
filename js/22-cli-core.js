@@ -8,8 +8,8 @@ const ARG_HELP = {
   "A.B.C.D": "IP address", "MASK": "Subnet mask", "WORD": "Name / text", "LINE": "Text (rest of the line)", "IFACE": "Interface (e.g. g0/0, fa0/1, vlan 1)",
   "RANGE": "Interface range (e.g. fa0/1 - 24)", "VLIST": "VLAN IDs (e.g. 10,20,30-40)", "HOST": "IP address or hostname",
 };
-function argOk(arg, t) {
-  if (arg === "A.B.C.D" || arg === "MASK") return isIp(t);
+function argOk(arg, t, dev) {
+  if (arg === "A.B.C.D" || arg === "MASK") return isIp(t) || (t === "0" && !!dev && dev.type === "firewall");
   if (arg === "WORD" || arg === "HOST") return true;
   if (arg === "VLIST") return /^\d+([-,]\d+)*$/.test(t);
   const r = arg.match(/^(\d+)-(\d+)$/);
@@ -37,7 +37,7 @@ function cliWalk(root, toks, line, sessDev) {
     const t = toks[i].t, tl = t.toLowerCase();
     const kws = n.kids.filter(k => k.kw && k.kw.toLowerCase().startsWith(tl));
     let pick = kws.find(k => k.kw.toLowerCase() === tl) || (kws.length === 1 ? kws[0] : null);
-    if (!pick && kws.length > 1 && !n.kids.some(k => k.arg && k.arg !== "IFACE" && argOk(k.arg, t))) return {err: "ambig", at: i, word: t};
+    if (!pick && kws.length > 1 && !n.kids.some(k => k.arg && k.arg !== "IFACE" && argOk(k.arg, t, sessDev))) return {err: "ambig", at: i, word: t};
     if (!pick) {
       for (const k of n.kids.filter(k => k.arg)) {
         if (k.arg === "LINE" || k.arg === "RANGE") { args.push(line.slice(toks[i].at).trim()); return {node: k.node, args}; }
@@ -48,7 +48,7 @@ function cliWalk(root, toks, line, sessDev) {
           if (sp && ifType(sp.t)) { args.push(s); i += used; pick = k; break; }
           continue;
         }
-        if (argOk(k.arg, t)) { args.push(t); pick = k; break; }
+        if (argOk(k.arg, t, sessDev)) { args.push(t); pick = k; break; }
       }
     }
     if (!pick) return {err: "invalid", at: i};
@@ -56,7 +56,7 @@ function cliWalk(root, toks, line, sessDev) {
   }
   return {node: n, args};
 }
-const ERR_INVALID = (prompt, line, at) => `${" ".repeat(prompt.length + at)}^\n% Invalid input detected at '^' marker.\n`;
+const ERR_INVALID = (prompt, line, at, fw) => `${" ".repeat(prompt.length + at)}^\n${fw ? "ERROR: " : ""}% Invalid input detected at '^' marker.\n`;
 function helpFor(kw) { return HELP[kw] || ""; }
 function cols(rows) { const w = Math.max(...rows.map(r => r[0].length)) + 2; return rows.map(([a, b]) => "  " + a.padEnd(w) + (b || "")).join("\n"); }
 
@@ -68,10 +68,13 @@ function newSession(dev, via, term) {
 function promptOf(s) {
   if (s.pending && s.pending.prompt != null) return s.pending.prompt;
   const h = s.dev.cfg.hostname;
-  return h + ({user: ">", priv: "#", config: "(config)#", if: "(config-if)#", subif: "(config-subif)#", range: "(config-if-range)#", line: "(config-line)#", vlan: "(config-vlan)#", dhcp: "(dhcp-config)#"})[s.mode];
+  return h + ({user: ">", priv: "#", config: "(config)#", if: "(config-if)#", subif: "(config-subif)#", range: "(config-if-range)#", line: "(config-line)#", vlan: "(config-vlan)#", dhcp: "(dhcp-config)#",
+    nacl: s.ctx && s.ctx.type === "standard" ? "(config-std-nacl)#" : "(config-ext-nacl)#", router: "(config-router)#", obj: "(config-network-object)#", pmap: "(config-pmap)#", pmapc: "(config-pmap-c)#", cmap: "(config-cmap)#"})[s.mode];
 }
-const MODE_TREE = {user: "user", priv: "priv", config: "config", if: "if", subif: "if", range: "if", line: "line", vlan: "vlan", dhcp: "dhcp"};
-const CONFIG_MODES = ["config", "if", "subif", "range", "line", "vlan", "dhcp"];
+const MODE_TREE = {user: "user", priv: "priv", config: "config", if: "if", subif: "if", range: "if", line: "line", vlan: "vlan", dhcp: "dhcp", nacl: "nacl", router: "router", obj: "obj", pmap: "pmap", pmapc: "pmapc", cmap: "cmap"};
+const CONFIG_MODES = ["config", "if", "subif", "range", "line", "vlan", "dhcp", "nacl", "router", "obj", "pmap", "pmapc", "cmap"];
+// firewalls run their own (ASA-style) command set: same parser, separate command trees
+const treeOf = (s, mode) => cliRoot((s.dev.type === "firewall" ? "asa:" : "") + MODE_TREE[mode]);
 
 // ---- terminal widget (used by the CLI tab, the PC Terminal app and telnet/ssh)
 function createTerminal(host, opts) {
@@ -181,21 +184,28 @@ function cliLine(s, line) {
     if (!l.trim()) { T.print("% Incomplete command.\n\n"); return; }
   }
   const toks = tokenize(l);
-  let r = cliWalk(cliRoot(MODE_TREE[mode]), toks, l, s.dev);
+  const fw = s.dev.type === "firewall";
+  let r = cliWalk(treeOf(s, mode), toks, l, s.dev);
   if ((r.err || !r.node.run) && mode !== "config" && CONFIG_MODES.includes(mode)) {
     // IOS tries the parent (global config) mode when a sub-mode doesn't know the command
-    const g = cliWalk(cliRoot("config"), toks, l, s.dev);
+    const g = cliWalk(treeOf(s, "config"), toks, l, s.dev);
     if (!g.err && g.node.run) { s.mode = mode = "config"; s.ctx = {}; r = g; }
   }
-  if (r.err === "ambig") { T.print(`% Ambiguous command: "${l.trim()}"\n`); return; }
-  if (r.err) {
-    if ((mode === "user" || mode === "priv") && toks.length === 1 && r.at === 0) { unknownExec(s, toks[0].t); return; }
-    const off = mode !== s.mode ? line.length - l.length : 0;
-    T.print(ERR_INVALID(promptOf(s), line, toks[r.at].at + off)); return;
+  if (fw && (r.err || !r.node.run) && CONFIG_MODES.includes(mode)) {
+    // the ASA runs show / ping / write / clear / packet-tracer straight from config mode (no "do")
+    const g = cliWalk(treeOf(s, "priv"), toks, l, s.dev);
+    if (!g.err && g.node.run) { mode = "priv"; r = g; }
   }
-  if (!r.node.run) { T.print("% Incomplete command.\n\n"); return; }
+  if (r.err === "ambig") { T.print(fw ? `ERROR: % Ambiguous command:  "${l.trim()}"\n` : `% Ambiguous command: "${l.trim()}"\n`); return; }
+  if (r.err) {
+    if (!fw && (mode === "user" || mode === "priv") && toks.length === 1 && r.at === 0) { unknownExec(s, toks[0].t); return; }
+    const off = mode !== s.mode ? line.length - l.length : 0;
+    T.print(ERR_INVALID(promptOf(s), line, toks[r.at].at + off, fw)); return;
+  }
+  if (!r.node.run) { T.print(fw ? "ERROR: % Incomplete command\n" : "% Incomplete command.\n\n"); return; }
   const saveMode = s.mode;
   const snap = CLI_DEPTH === 0 && isIOS(s.dev) && CONFIG_MODES.includes(s.mode) ? ifSnap(s.dev) : null;
+  const osnap = CLI_DEPTH === 0 && typeof ospfSnapshot === "function" ? ospfSnapshot() : null;
   if (mode !== s.mode) s.mode = mode;
   CLI_DEPTH++;
   try { r.node.run(s, r.args, l); }
@@ -204,6 +214,7 @@ function cliLine(s, line) {
   if (mode !== saveMode && s.mode === "priv") s.mode = saveMode;   // `do` returns to where you were
   if (CLI_DEPTH === 0 && isIOS(s.dev)) {
     if (snap) ifDiff(s, snap); else netDirty();
+    if (osnap) ospfNotify(osnap);
     save(); scheduleRender();
     if (typeof activityCheck === "function") activityCheck();
     if (typeof refreshDevWins === "function") refreshDevWins(s.dev, true);
@@ -223,7 +234,7 @@ function cliHelp(s, line) {
   let mode = s.mode, l = line;
   const t0 = tokenize(line);
   if (CONFIG_MODES.includes(mode) && t0.length && t0[0].t.toLowerCase() === "do" && (t0.length > 1 || /\s$/.test(line))) { mode = "priv"; l = line.slice(t0[1] ? t0[1].at : line.length); }
-  const root = cliRoot(MODE_TREE[mode]), toks = tokenize(l), partial = l && !/\s$/.test(l);
+  const root = treeOf(s, mode), toks = tokenize(l), partial = l && !/\s$/.test(l);
   const walkToks = partial ? toks.slice(0, -1) : toks;
   const r = cliWalk(root, walkToks, l, s.dev);
   if (r.err) return "% Unrecognized command";
@@ -245,7 +256,7 @@ function cliTab(s, line) {
   const t0 = tokenize(line);
   if (CONFIG_MODES.includes(mode) && t0.length > 1 && t0[0].t.toLowerCase() === "do") { mode = "priv"; pre = line.slice(0, t0[1].at); l = line.slice(t0[1].at); }
   const toks = tokenize(l);
-  const r = cliWalk(cliRoot(MODE_TREE[mode]), toks.slice(0, -1), l, s.dev);
+  const r = cliWalk(treeOf(s, mode), toks.slice(0, -1), l, s.dev);
   if (r.err) return line;
   const last = toks[toks.length - 1], p = last.t.toLowerCase();
   const m = r.node.kids.filter(k => k.kw && k.kw.toLowerCase().startsWith(p));
@@ -313,6 +324,10 @@ function endSession(s, msg) {
 function doEnable(s) {
   const c = s.dev.cfg, T = s.term;
   const p = c.enableSecret || c.enablePassword;
+  if (s.dev.type === "firewall") {   // the ASA always asks, and an unset enable password is just Enter
+    s.pending = {prompt: "Password: ", secret: true, fn: pw => { if (!p ? pw === "" : pwCheck(p, pw)) { s.mode = "priv"; } else T.print("Invalid password\n"); T.refresh(); }};
+    return;
+  }
   if (!p) {
     if (s.via === "telnet" || s.via === "ssh") { T.print("% No password set.\n"); return; }
     s.mode = "priv"; return;

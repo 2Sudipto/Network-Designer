@@ -53,7 +53,7 @@ const portSummary = dev => { const m = modelOf(dev); if (!m) return ""; const g 
 // ---- link status (green / orange / red lights). Later phases plug real config and STP in here.
 function portAdminUp(dev, port) {
   const c = dev && dev.cfg && dev.cfg.ifaces && dev.cfg.ifaces[port];
-  return !(c && c.shutdown);
+  return !(c && c.shutdown) && !(typeof RT !== "undefined" && dev && RT[dev.id] && RT[dev.id].errdis && RT[dev.id].errdis[port]);
 }
 function portBlocked(dev, port) { return typeof stpBlocked === "function" ? stpBlocked(dev, port) : false; }
 function linkStatus(l) {

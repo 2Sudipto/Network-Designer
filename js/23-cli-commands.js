@@ -49,7 +49,7 @@ function ifDiff(s, before) {
     if (a.proto !== b.proto) pr(s, `%LINEPROTO-5-UPDOWN: Line protocol on Interface ${longIf(n)}, changed state to ${b.proto}`);
   }
 }
-function unsupported(what) { return s => pr(s, `% ${what} is not simulated in this version (see the README roadmap).`); }
+function unsupported(what) { return (s, a) => pr(s, what === "router" && a && /^(eigrp|rip|bgp|isis)/i.test(a[0] || "") ? `% router ${(a[0] || "").split(/\s/)[0]} is not simulated in this version: use router ospf (single or multi-area).` : `% ${what} is not simulated in this version (see the README roadmap).`); }
 function parseRange(d, str) {
   const out = [];
   for (const part of str.split(",")) {
@@ -113,25 +113,35 @@ defCmd("priv", "clear mac address-table dynamic", s => { rt(s.dev).mac = {}; });
 
 // ---- ping / traceroute / telnet / ssh
 function resolveHost(s, host) { return isIp(host) ? host : null; }
-function iosPing(s, host) {
+function iosPing(s, host, opt) {
+  opt = opt || {};
   const ip = resolveHost(s, host);
   if (!ip) { pr(s, "% Unrecognized host or address, or protocol not running.\n"); return; }
-  const T = s.term;
-  pr(s, `Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:`);
+  let src = "";
+  if (opt.source) {
+    if (isIp(opt.source)) src = opt.source;
+    else { const n = resolveIf(s.dev, opt.source), i = n && s.dev.cfg.ifaces[n]; if (!i || !i.ip) { pr(s, "% Invalid source interface - " + (i ? "IP not enabled" : "not found")); return; } src = i.ip; }
+    if (!myIps(s.dev).includes(src)) { pr(s, "% Invalid source address- IP address not on any of our up interfaces"); return; }
+  }
+  const T = s.term, count = opt.repeat || 5;
+  pr(s, `Type escape sequence to abort.\nSending ${count}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:${src ? "\nPacket sent with a source address of " + src : ""}`);
   let ok = 0;
   const seq = [];
-  for (let k = 0; k < 5; k++) seq.push([k ? 280 : 80, () => {
-    const R = pingOnce(s.dev, ip, {seq: k}); simCapture(s.dev, "ICMP", R.events);
+  for (let k = 0; k < count; k++) seq.push([k ? 280 : 80, () => {
+    const R = pingOnce(s.dev, ip, {seq: k, src}); simCapture(s.dev, "ICMP", R.events);
     const r = R.res;
     const ch = r.res === "reply" ? "!" : r.res === "unreach" ? "U" : r.res === "ttl" ? "&" : ".";
     if (ch === "!") ok++;
-    T.print(ch);
+    T.print(ch + (k % 70 === 69 ? "\n" : ""));
   }]);
   T.runAsync(seq, () => T.print(`
-Success rate is ${ok * 20} percent (${ok}/5)${ok ? ", round-trip min/avg/max = 0/0/1 ms" : ""}
+Success rate is ${Math.floor(ok * 100 / count)} percent (${ok}/${count})${ok ? ", round-trip min/avg/max = 1/2/4 ms" : ""}
 `));
 }
 defCmd(EXEC, "ping <HOST>", (s, a) => iosPing(s, a[0]));
+defCmd(EXEC, "ping <HOST> repeat <1-2147483647>", (s, a) => iosPing(s, a[0], {repeat: +a[1]}));
+defCmd(EXEC, "ping <HOST> source <WORD>", (s, a) => iosPing(s, a[0], {source: a[1]}));
+defCmd(EXEC, "ping <HOST> source <WORD> repeat <1-2147483647>", (s, a) => iosPing(s, a[0], {source: a[1], repeat: +a[2]}));
 function iosTrace(s, host) {
   const ip = resolveHost(s, host);
   if (!ip) { pr(s, "% Unrecognized host or address, or protocol not running.\n"); return; }
@@ -156,6 +166,8 @@ function remoteLogin(T, fromDev, ip, proto, user) {
   if (proto === "telnet") T.print(`Trying ${ip} ...`);
   const r = tcpConnect(fromDev, ip, port);
   simCapture(fromDev, proto, r.events);
+  if (!r.ok && r.unreach) { T.print("\n% Destination unreachable; gateway or host down\n"); return null; }
+  if (r.ok && isFw(r.dev)) { if (proto === "telnet") T.print("Open\n"); return asaRemoteLogin(T, fromDev, ip, proto, user, r.dev); }
   if (!r.ok) {
     T.print(proto === "telnet" ? (r.refused ? "\n% Connection refused by remote host\n" : "\n% Connection timed out; remote host not responding\n") : (r.refused ? "% Connection refused by remote host\n" : "% Connection timed out; remote host not responding\n"));
     return null;
@@ -219,7 +231,7 @@ defCmd(SHOWM, "show interfaces <IFACE>", (s, a) => { const n = resolveIf(s.dev, 
 defCmd(SHOWM, "show interfaces status", s => {
   if (!isSwitch(s.dev)) { pr(s, "% Invalid input detected at '^' marker."); return; }
   const d = s.dev, L = ["Port      Name               Status       Vlan       Duplex  Speed Type"];
-  allPorts(d).filter(p => p !== "Console").forEach(p => { const i = d.cfg.ifaces[p], st = ifStatus(d, p); L.push(pad(shortPort(p), 10) + pad((i.desc || "").slice(0, 18), 19) + pad(st.proto === "up" ? "connected" : st.status.startsWith("admin") ? "disabled" : "notconnect", 13) + pad(i.routed ? "routed" : operTrunk(d, p) ? "trunk" : i.accessVlan, 11) + pad(i.duplex === "auto" ? "auto" : i.duplex, 8) + pad(i.speed, 6) + (/^G/i.test(p) ? "10/100/1000BaseTX" : "10/100BaseTX")); });
+  allPorts(d).filter(p => p !== "Console").forEach(p => { const i = d.cfg.ifaces[p], st = ifStatus(d, p); L.push(pad(shortPort(p), 10) + pad((i.desc || "").slice(0, 18), 19) + pad(st.err ? "err-disabled" : st.proto === "up" ? "connected" : st.status.startsWith("admin") ? "disabled" : "notconnect", 13) + pad(i.routed ? "routed" : operTrunk(d, p) ? "trunk" : i.accessVlan, 11) + pad(i.duplex === "auto" ? "auto" : i.duplex, 8) + pad(i.speed, 6) + (/^G/i.test(p) ? "10/100/1000BaseTX" : "10/100BaseTX")); });
   pr(s, L.join("\n"));
 });
 defCmd(SHOWM, "show interfaces trunk", s => {
@@ -228,7 +240,7 @@ defCmd(SHOWM, "show interfaces trunk", s => {
   if (!tr.length) { pr(s, ""); return; }
   const vl = Object.keys(d.cfg.vlans).map(Number);
   const L = ["Port        Mode         Encapsulation  Status        Native vlan"];
-  tr.forEach(p => { const i = d.cfg.ifaces[p]; L.push(pad(shortPort(p), 12) + pad(i.mode === "trunk" ? "on" : "auto", 13) + pad("802.1q", 15) + pad("trunking", 14) + (i.nativeVlan || 1)); });
+  tr.forEach(p => { const i = d.cfg.ifaces[p]; L.push(pad(shortPort(p), 12) + pad(i.mode === "trunk" ? "on" : i.mode === "desirable" ? "desirable" : "auto", 13) + pad("802.1q", 15) + pad("trunking", 14) + (i.nativeVlan || 1)); });
   L.push("", "Port        Vlans allowed on trunk"); tr.forEach(p => L.push(pad(shortPort(p), 12) + (d.cfg.ifaces[p].allowed === "all" ? "1-1005" : d.cfg.ifaces[p].allowed)));
   L.push("", "Port        Vlans allowed and active in management domain"); tr.forEach(p => L.push(pad(shortPort(p), 12) + vlanRanges(vl.filter(v => vlanListHas(d.cfg.ifaces[p].allowed, v)))));
   L.push("", "Port        Vlans in spanning tree forwarding state and not pruned"); tr.forEach(p => L.push(pad(shortPort(p), 12) + (stpBlocked(d, p) ? "none" : vlanRanges(vl.filter(v => vlanListHas(d.cfg.ifaces[p].allowed, v))))));
@@ -453,7 +465,7 @@ defCmd("config", "spanning-tree vlan <VLIST> priority <0-61440>", (s, a) => { if
 defCmd("config", "spanning-tree vlan <VLIST> root primary", s => { s.dev.cfg.stpPriority = 24576; });
 defCmd("config", "spanning-tree vlan <VLIST> root secondary", s => { s.dev.cfg.stpPriority = 28672; });
 defCmd("config", "spanning-tree mode <WORD>", () => {});
-["router", "access-list", "ip access-list", "ip nat", "standby", "ipv6", "ntp", "snmp-server", "logging", "aaa", "vtp", "port-channel"].forEach(w => defCmd("config", w + " <LINE>", unsupported(w)));
+["router", "standby", "ipv6", "ntp", "snmp-server", "logging", "aaa", "vtp", "port-channel"].forEach(w => defCmd("config", w + " <LINE>", unsupported(w)));
 
 // ======================================================================= INTERFACE CONFIG
 defCmd("if", "shutdown", s => setPorts(s, i => { i.shutdown = true; }));
@@ -487,9 +499,10 @@ const swMode = m => s => {
 defCmd("if", "switchport mode access", swMode("access"));
 defCmd("if", "switchport mode trunk", swMode("trunk"));
 defCmd("if", "switchport mode dynamic auto", swMode("dynamic"));
-defCmd("if", "switchport mode dynamic desirable", swMode("dynamic"));
+defCmd("if", "switchport mode dynamic desirable", swMode("desirable"));
 defCmd("if", "switchport trunk encapsulation dot1q", s => { if (needSwitchport(s)) setPorts(s, i => { i.encap = "dot1q"; }); });
-defCmd("if", "switchport nonegotiate", s => { needSwitchport(s); });
+defCmd("if", "switchport nonegotiate", s => { if (!needSwitchport(s)) return; if (curIfs(s).some(n => /dynamic|desirable/.test(s.dev.cfg.ifaces[n].mode))) { pr(s, "Command rejected: Conflict between 'nonegotiate' and 'dynamic' status."); return; } setPorts(s, i => { i.noneg = true; }); });
+defCmd("if", "no switchport nonegotiate", s => setPorts(s, i => { delete i.noneg; }));
 defCmd("if", "switchport access vlan <1-4094>", (s, a) => {
   if (!needSwitchport(s)) return;
   const v = +a[0];
@@ -522,7 +535,7 @@ defCmd("if", "clock rate <300-4000000>", (s, a) => {
 defCmd("if", "no clock rate", s => setPorts(s, i => { i.clock = null; }));
 defCmd("if", "encapsulation dot1Q <1-4094>", (s, a) => { if (!curIfs(s).every(n => /\.\d+$/.test(n))) { pr(s, "% Invalid input detected at '^' marker."); return; } setPorts(s, i => { i.dot1q = +a[0]; i.dot1qNative = false; }); });
 defCmd("if", "encapsulation dot1Q <1-4094> native", (s, a) => { if (!curIfs(s).every(n => /\.\d+$/.test(n))) { pr(s, "% Invalid input detected at '^' marker."); return; } setPorts(s, i => { i.dot1q = +a[0]; i.dot1qNative = true; }); });
-["switchport port-security", "channel-group", "ip ospf", "standby", "ip nat", "ip access-group", "ipv6"].forEach(w => defCmd("if", w + " <LINE>", unsupported(w)));
+["channel-group", "standby", "ipv6"].forEach(w => defCmd("if", w + " <LINE>", unsupported(w)));
 
 // ======================================================================= LINE CONFIG
 const lineObj = s => s.dev.cfg.lines[s.ctx.line];

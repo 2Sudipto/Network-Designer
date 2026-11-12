@@ -12,6 +12,7 @@ const IF_TYPES = [
   [/^(v|vl|vla|vlan)$/i, "Vlan", "Vlan"],
   [/^(l|lo|loop|loopback)$/i, "Loopback", "Lo"],
   [/^(port|port )$/i, "Port", "Port"],
+  [/^(m|ma|mgmt|management)$/i, "Management", "Ma"],
 ];
 function splitIf(name) {
   const m = String(name).trim().match(/^([a-z]+(?: (?=\d))?)\s*([\d/.:]+)$/i);

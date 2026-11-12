@@ -6,11 +6,11 @@ const BCAST = "ffff.ffff.ffff";
 function rt(d) { return RT[d.id] || (RT[d.id] = {arp: {}, mac: {}, leases: {}, lease: null, stats: {}}); }
 function resetRuntime(d) { if (d) delete RT[d.id]; else for (const k in RT) delete RT[k]; netDirty(); }
 let STP_CACHE = null;
-function netDirty() { STP_CACHE = null; }
+function netDirty() { STP_CACHE = null; if (typeof ospfDirty === "function") ospfDirty(); }
 function onTopologyChange() {
   netDirty();
   // pulling a cable clears what was learned through it
-  for (const id in RT) { const r = RT[id]; r.mac = {}; }
+  for (const id in RT) { const r = RT[id]; r.mac = {}; r.psec = {}; }
   autoDhcp(600);
 }
 
@@ -25,7 +25,7 @@ function isDCE(l, aEnd) { const c = l.cable; if (c === "serialDCE" || c === "ser
 function wirelessPeers(d) { return S.links.filter(l => l.cable === "wireless" && (l.a === d.id || l.b === d.id)).map(l => ({l, dev: byId(l.a === d.id ? l.b : l.a), port: "Wireless0"})); }
 function adminUp(d, port) {
   if (!isIOS(d)) return true;
-  const i = d.cfg.ifaces[port]; return !(i && i.shutdown);
+  const i = d.cfg.ifaces[port]; return !(i && i.shutdown) && !(RT[d.id] && RT[d.id].errdis && RT[d.id].errdis[port]);
 }
 function physUp(d, port) {
   const o = linkAt(d, port); if (!o) return false;
@@ -44,6 +44,7 @@ function ifStatus(d, n) {
   const i = d.cfg.ifaces[n];
   if (!i) return {status: "down", proto: "down"};
   if (i.shutdown) return {status: "administratively down", proto: "down"};
+  if (RT[d.id] && RT[d.id].errdis && RT[d.id].errdis[n]) return {status: "down", proto: "down", err: "err-disabled"};
   if (/^Loopback/.test(n)) return {status: "up", proto: "up"};
   if (/\.\d+$/.test(n)) { const p = ifStatus(d, parentIf(n)); return p.status === "up" ? {status: "up", proto: p.proto} : {status: p.status === "administratively down" ? "down" : p.status, proto: "down"}; }
   if (/^Vlan\d+$/.test(n)) {
@@ -62,9 +63,7 @@ const ifUp = (d, n) => ifStatus(d, n).proto === "up";
 const isSwitchport = (d, p) => isSwitch(d) && !isVirtualIf(p) && !(d.cfg.ifaces[p] && d.cfg.ifaces[p].routed);
 function operTrunk(d, p) {
   const i = d.cfg.ifaces[p]; if (!i) return false;
-  if (i.mode === "trunk") return true;
-  if (i.mode === "dynamic") { const o = linkAt(d, p); return !!(o && isSwitch(o.dev) && isSwitchport(o.dev, o.port) && o.dev.cfg.ifaces[o.port] && o.dev.cfg.ifaces[o.port].mode === "trunk"); }
-  return false;
+  return dtpTrunk(d, p);   // DTP: trunk / desirable / auto negotiation (30-ios-extra.js)
 }
 function vlanListHas(list, v) {
   if (list === "all") return true; if (list === "none") return false;
@@ -189,10 +188,12 @@ function routeTable(d) {
     if (!ok) ok = c.routes.some(x => x !== r && x.nh && viaConnected(x.nh) && sameNet(r.nh, x.net, x.mask));
     if (ok) out.push({code: r.net === "0.0.0.0" && r.mask === "0.0.0.0" ? "S*" : "S", net: r.net, mask: r.mask, nh: r.nh, ad: r.ad || 1});
   });
-  // lower AD wins for the same prefix
-  const best = {};
-  out.forEach(r => { const k = r.net + "/" + r.mask + r.code[0]; if (r.code[0] !== "S") return; if (!best[r.net + "/" + r.mask] || r.ad < best[r.net + "/" + r.mask].ad) best[r.net + "/" + r.mask] = r; });
-  return out.filter(r => r.code[0] !== "S" || best[r.net + "/" + r.mask] === r || best[r.net + "/" + r.mask].ad === r.ad);
+  if (!isFw(d) && typeof ospfRoutes === "function") ospfRoutes(d).forEach(r => out.push(r));
+  // lower administrative distance wins for the same prefix (connected 0, static 1, OSPF 110)
+  const best = {}, dyn = r => r.code !== "C" && r.code !== "L";
+  out.forEach(r => { if (!dyn(r)) return; const k = r.net + "/" + r.mask; if (!best[k] || r.ad < best[k].ad) best[k] = r; });
+  const connSet = new Set(out.filter(r => r.code === "C").map(r => r.net + "/" + r.mask));
+  return out.filter(r => !dyn(r) || (!connSet.has(r.net + "/" + r.mask) && best[r.net + "/" + r.mask].ad === r.ad));
 }
 function lookup(d, dst) {
   let best = null;
@@ -265,6 +266,7 @@ function switchIn(d, port, f) {
   if (operTrunk(d, port)) { vlan = f.tag || i.nativeVlan || 1; if (!vlanListHas(i.allowed, vlan)) { if (CUR) CUR.drop = `VLAN ${vlan} not allowed on trunk ${port}`; return; } }
   else { if (f.tag) { if (CUR) CUR.drop = `tagged frame arrived on access port ${port}`; return; } vlan = i.accessVlan || 1; }
   if (!d.cfg.vlans[vlan]) { if (CUR) CUR.drop = `VLAN ${vlan} does not exist on ${d.name}`; return; }
+  if (!psecCheck(d, port, f, vlan)) return;
   r.mac[vlan + "|" + f.src] = {port, vlan, mac: f.src};
   note(`${d.name} learns ${f.src} on ${port} (VLAN ${vlan})`);
   const svi = l3Ifaces(d).find(x => x.svi && x.vlan === vlan && x.up);
@@ -306,17 +308,20 @@ function l3In(d, iface, f) {
   const r = rt(d);
   if (f.type === "arp") {
     const a = f.arp;
-    if (a.tip === iface.ip || a.op === "reply") {
+    const proxy = a.op === "request" && a.tip !== iface.ip && (isFw(d) ? asaArpOwns(d, iface, a.tip) : isIOS(d) && iosNatOwns(d, iface, a.tip));
+    if (a.tip === iface.ip || a.op === "reply" || proxy) {
       r.arp[a.sip] = {mac: a.smac, iface: iface.name, age: 0};
       note(`${d.name} adds ${a.sip} → ${a.smac} to its ARP table`);
     }
-    if (a.op === "request" && a.tip === iface.ip) {
-      note(`${d.name} owns ${a.tip}: sends an ARP reply`);
-      l2Send(d, iface, {type: "arp", dst: a.smac, arp: {op: "reply", sip: iface.ip, smac: iface.mac, tip: a.sip, tmac: a.smac}});
+    if (a.op === "request" && (a.tip === iface.ip || proxy)) {
+      note(proxy ? `${d.name} answers ARP for its NAT address ${a.tip} (proxy ARP)` : `${d.name} owns ${a.tip}: sends an ARP reply`);
+      l2Send(d, iface, {type: "arp", dst: a.smac, arp: {op: "reply", sip: a.tip, smac: iface.mac, tip: a.sip, tmac: a.smac}});
     } else if (a.op === "request") note(`${d.name} is not ${a.tip}: ignores the ARP request`);
     return;
   }
   const p = f.ip;
+  if (isFw(d)) return fwIn(d, iface, f);
+  if (isIOS(d) && !iosIngress(d, iface, p)) return;
   const mine = myIps(d).includes(p.dst) || p.dst === "255.255.255.255" || (iface.ip && iface.mask && p.dst === bcastOf(iface.ip, iface.mask));
   if (p.udp && p.udp.dhcp) return dhcpIn(d, iface, f);
   if (mine) return deliver(d, iface, p);
@@ -329,6 +334,7 @@ function forward(d, inIf, p) {
   const rt0 = lookup(d, p.dst);
   if (!rt0) { note(`${d.name} has no route to ${p.dst}: sends ICMP unreachable`); if (CUR) CUR.drop = `no route to ${p.dst}`; ipOut(d, {src: inIf.ip, dst: p.src, ttl: 255, proto: "icmp", icmp: {type: "unreach", id: p.icmp ? p.icmp.id : 0}}); return; }
   note(`${d.name} routing table: ${p.dst} → ${rt0.route.code} ${rt0.route.net}/${maskToLen(rt0.route.mask)} via ${rt0.nh === p.dst ? "directly connected" : rt0.nh} out ${rt0.iface}`);
+  if (isIOS(d) && !iosEgress(d, inIf, rt0.iface, p)) return;
   sendVia(d, rt0, p);
 }
 // send an IP packet out of the interface chosen by a route
@@ -338,9 +344,9 @@ function sendVia(d, route, p) {
   if (iface.loop) return false;
   const had = !!rt(d).arp[route.nh] || portKind(iface.port || "") === "serial";
   const mac = arpResolve(d, iface, route.nh);
-  if (!mac) { note(`ARP for ${route.nh} got no reply: packet dropped`); return false; }
+  if (!mac) { note(`ARP for ${route.nh} got no reply: packet dropped`); if (CUR && !CUR.drop) CUR.drop = `ARP for ${route.nh} failed`; return false; }
   // a router drops the packet that made it ARP (that's why the first ping is often ".")
-  if (!had) { logNote(d, `${d.name} had to ARP for ${route.nh} first: this packet is dropped`); return false; }
+  if (!had && !isFw(d)) { logNote(d, `${d.name} had to ARP for ${route.nh} first: this packet is dropped`); return false; }
   l2Send(d, iface, {type: "ip", dst: mac, ip: p});
   return true;
 }
@@ -357,7 +363,7 @@ function ipOut(d, p) {
   const mac = iface && iface.up ? arpResolve(d, iface, rt0.nh) : null;
   if (!mac) { logNote(d, `${d.name}: ${iface && !iface.up ? rt0.iface + " is down" : "ARP for " + rt0.nh + " failed"}`); return false; }
   // IOS drops the packet that triggered ARP; PCs hold it until the reply arrives
-  if (!hadArp && isIOS(d) && p.proto === "icmp" && p.icmp.type === "echo") { logNote(d, `${d.name} needed ARP first: this echo is dropped (".")`); return false; }
+  if (!hadArp && isIOS(d) && !isFw(d) && p.proto === "icmp" && p.icmp.type === "echo") { logNote(d, `${d.name} needed ARP first: this echo is dropped (".")`); return false; }
   l2Send(d, iface, {type: "ip", dst: mac, ip: p});
   return true;
 }
@@ -383,14 +389,20 @@ function deliver(d, iface, p) {
   if (p.proto === "tcp") {
     const t = p.tcp;
     if (t.flags === "SYN") {
-      const ok = tcpListening(d, t.dport);
+      const ok = tcpListening(d, t.dport, p.src);
+      if (ok && WAIT) WAIT.peer = d.id;
       note(ok ? `${d.name} is listening on TCP ${t.dport}: SYN-ACK` : `${d.name} is not listening on TCP ${t.dport}: RST`);
       ipOut(d, {src: p.dst, dst: p.src, ttl: 255, proto: "tcp", tcp: {sport: t.dport, dport: t.sport, flags: ok ? "SYN-ACK" : "RST", id: t.id}});
     } else if (WAIT && WAIT.dev === d.id && WAIT.id === t.id) { WAIT.res = t.flags; WAIT.from = p.src; }
   }
 }
-function tcpListening(d, port) {
-  if (isIOS(d)) { const tr = d.cfg.lines.vty.transport; if (port === 23) return tr === "all" || /telnet/.test(tr); if (port === 22) return (tr === "all" || /ssh/.test(tr)) && d.cfg.ssh.keyBits > 0; return false; }
+function tcpListening(d, port, src) {
+  if (isFw(d)) return port === 22 ? d.cfg.ssh.keyBits > 0 : port === 23 || (port === 443 && d.cfg.mgmt.httpServer);
+  if (isIOS(d)) {
+    const tr = d.cfg.lines.vty.transport;
+    if ((port === 22 || port === 23) && src && !vtyAllowed(d, src)) { note(`${d.name}: access-class ${d.cfg.lines.vty.accessClass} on line vty refuses ${src}`); return false; }
+    if (port === 23) return tr === "all" || /telnet/.test(tr); if (port === 22) return (tr === "all" || /ssh/.test(tr)) && d.cfg.ssh.keyBits > 0; return false;
+  }
   if (d.svc && port === 80) return d.svc.http.on;
   return false;
 }
@@ -421,9 +433,13 @@ function dhcpIn(d, iface, f) {
 function dhcpServe(d, iface, m, p) {
   let pool = null;
   const net = m.giaddr || iface.ip;
-  if (isIOS(d)) {
+  if (isIOS(d) && !isFw(d)) {
     const entry = Object.entries(d.cfg.dhcp.pools).find(([, x]) => x.network && net && sameNet(net, x.network, x.mask));
     if (entry) pool = {name: entry[0], network: entry[1].network, mask: entry[1].mask, gw: entry[1].gw || "", dns: entry[1].dns || "", excluded: d.cfg.dhcp.excluded};
+  } else if (isFw(d)) {
+    const ifn = (d.cfg.ifaces[iface.name] || {}).nameif, x = ifn && d.cfg.dhcpd.pools[ifn];
+    if (!x || !d.cfg.dhcpd.enabled[ifn] || m.giaddr) return false;
+    pool = {name: "dhcpd " + ifn, network: netOf(iface.ip, iface.mask), mask: iface.mask, gw: d.cfg.dhcpd.router || iface.ip, dns: d.cfg.dhcpd.dns[0] || "", start: x.start, max: ipToInt(x.end) - ipToInt(x.start) + 1, excluded: []};
   } else if (d.svc && d.svc.dhcp.on) {
     const x = d.svc.dhcp.pools.find(q => q.start && net && sameNet(net, q.start, q.mask)) || (!m.giaddr && d.svc.dhcp.pools[0]);
     if (x && x.start) pool = {name: x.name, network: netOf(x.start, x.mask), mask: x.mask, gw: x.gw !== "0.0.0.0" ? x.gw : "", dns: x.dns !== "0.0.0.0" ? x.dns : "", start: x.start, max: x.max, excluded: []};
@@ -473,7 +489,7 @@ function tcpConnect(d, dst, port, retry) {
   const id = PKT_ID++;
   const r = runTraced(() => { WAIT = {dev: d.id, id, res: null}; ipOut(d, {dst, ttl: 128, proto: "tcp", tcp: {sport: 1025 + (id % 3000), dport: port, flags: "SYN", id}}); const w = WAIT; WAIT = null; return w; });
   if (!r.res.res && !retry) { const r2 = tcpConnect(d, dst, port, true); r2.events = r.events.concat(r2.events); return r2; }
-  return {ok: r.res.res === "SYN-ACK", refused: r.res.res === "RST", dev: ownerOfIp(dst), events: r.events};
+  return {ok: r.res.res === "SYN-ACK", refused: r.res.res === "RST", unreach: r.res.res === "unreach", dev: byId(r.res.peer) || ownerOfIp(dst), events: r.events};
 }
 function dhcpRequest(d, tries) {
   tries = tries || 0;

@@ -59,12 +59,16 @@ const MODELS = {
       M("N9K-C93180YC-FX", "48 × 25G + 6 × 100G (spine/leaf)", range("Eth1/", 1, 48), range("Eth1/", 49, 54))]],
   ],
   firewall: [
-    ["ASA", [
-      M("ASA 5505", "8 × Fast Ethernet switch ports", range("E0/", 0, 7)),
-      M("ASA 5506-X", "8 × Gigabit", range("G1/", 1, 8))]],
-    ["Firepower", [
-      M("FPR-1010", "8 × Gigabit", range("Eth1/", 1, 8)),
-      M("FPR-2110", "12 × Gigabit + 4 × SFP", range("Eth1/", 1, 16))]],
+    ["ASA 5500-X (ASA software)", [
+      M("ASA 5506-X", "8 × Gigabit + management", range("G1/", 1, 8), ["M1/1"]),
+      M("ASA 5508-X", "8 × Gigabit + management", range("G1/", 1, 8), ["M1/1"]),
+      M("ASA 5516-X", "8 × Gigabit + management", range("G1/", 1, 8), ["M1/1"])]],
+    ["Firepower (ASA software)", [
+      M("FPR-1010", "8 × Gigabit + management", range("Eth1/", 1, 8), ["M1/1"]),
+      M("FPR-1120", "8 × Gigabit + 4 × SFP + management", range("Eth1/", 1, 12), ["M1/1"]),
+      M("FPR-2110", "12 × Gigabit + 4 × SFP + management", range("Eth1/", 1, 16), ["M1/1"])]],
+    ["Legacy", [
+      M("ASA 5505", "8 × Fast Ethernet (routed in this simulator)", range("E0/", 0, 7))]],
   ],
   cloud: [["Packet Tracer", [M("Cloud-PT", "ISP / internet cloud", range("Eth", 0, 5)), M("ISP", "Generic provider", range("Eth", 0, 5))]]],
   hub: [["Packet Tracer", [M("Hub-PT", "6 ports, one collision domain", range("Port ", 0, 5))]]],

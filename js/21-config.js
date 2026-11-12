@@ -7,7 +7,7 @@ const isIOS = d => d && IOS_TYPES.includes(d.type);
 const isHost = d => d && HOST_TYPES.includes(d.type);
 const isSwitch = d => d && (d.type === "switch" || d.type === "l3switch");
 const isRouterish = d => d && (d.type === "router" || d.type === "firewall");
-const PROMPT_NAME = {router: "Router", switch: "Switch", l3switch: "Switch", firewall: "Router"};
+const PROMPT_NAME = {router: "Router", switch: "Switch", l3switch: "Switch", firewall: "ciscoasa"};
 
 function defaultCfg(d) {
   const c = {
@@ -21,6 +21,7 @@ function defaultCfg(d) {
     if (isSwitch(d)) Object.assign(c.ifaces[p], {mode: "dynamic", accessVlan: 1, nativeVlan: 1, allowed: "all", routed: false});
   });
   if (isSwitch(d)) { c.vlans = {1: "default"}; c.ifaces.Vlan1 = {shutdown: true, desc: "", ip: "", mask: "", helper: []}; }
+  if (d.type === "firewall") asaExtend(c, d);   // ASA-style firewall OS (32-asa.js)
   return c;
 }
 function defaultHost(d) { return {dhcp: d.type === "phone" || d.type === "tablet", ip: "", mask: "", gw: "", dns: ""}; }
@@ -33,7 +34,7 @@ function defaultSvc() {
 }
 function initDevice(d) {
   if (isIOS(d)) {
-    if (!d.cfg) d.cfg = defaultCfg(d);   // boots as "Router" / "Switch", like real IOS
+    if (!d.cfg || (d.type === "firewall" && !d.cfg.asa)) d.cfg = defaultCfg(d);   // boots as "Router" / "Switch", like real IOS (firewalls ship with a factory-default config)
     // ports added by a model change get defaults
     const def = defaultCfg(d);
     for (const p in def.ifaces) if (!d.cfg.ifaces[p]) d.cfg.ifaces[p] = def.ifaces[p];
@@ -84,6 +85,7 @@ function vlanRanges(list) {
 // ---- running-config text, in IOS order
 function runningConfig(d, c) {
   c = c || d.cfg;
+  if (d.type === "firewall") return asaRunningConfig(d, c);
   const L = ["Building configuration...", "", `Current configuration : ${1200 + JSON.stringify(c).length} bytes`, "!", "version 15.2", "no service timestamps log datetime msec", "no service timestamps debug datetime msec"];
   L.push(c.spe ? "service password-encryption" : "no service password-encryption", "!", "hostname " + c.hostname, "!");
   if (c.enableSecret) L.push("enable secret 5 " + c.enableSecret.v);
@@ -100,6 +102,7 @@ function runningConfig(d, c) {
     L.push("!");
   }
   if (isRouterish(d)) L.push("no ip cef", "no ipv6 cef", "!");
+  if (c.errRecovery) L.push("errdisable recovery cause psecure-violation", "!");
   for (const [u, o] of Object.entries(c.users)) L.push(`username ${u}${o.priv != null ? " privilege " + o.priv : ""} ${o.secret ? "secret 5 " + o.secret.v : "password " + pwShow(o.password)}`);
   if (Object.keys(c.users).length) L.push("!");
   if (c.ssh.version) L.push("ip ssh version " + c.ssh.version);
@@ -122,20 +125,42 @@ function runningConfig(d, c) {
         if (i.allowed !== "all") L.push(" switchport trunk allowed vlan " + i.allowed);
         L.push(" switchport mode trunk");
       } else if (i.accessVlan !== 1) L.push(" switchport access vlan " + i.accessVlan);
+      if (i.noneg) L.push(" switchport nonegotiate");
+      if (i.mode === "desirable") L.push(" switchport mode dynamic desirable");
+      if (i.ps && i.ps.on) {
+        L.push(" switchport port-security");
+        if (i.ps.max !== 1) L.push(" switchport port-security maximum " + i.ps.max);
+        if (i.ps.viol !== "shutdown") L.push(" switchport port-security violation " + i.ps.viol);
+        if (i.ps.sticky) L.push(" switchport port-security mac-address sticky");
+        i.ps.macs.forEach(m => L.push(" switchport port-security mac-address " + (m.sticky ? "sticky " : "") + m.mac));
+      }
       if (i.portfast) L.push(" spanning-tree portfast");
     } else {
       L.push(i.ip ? ` ip address ${i.ip} ${i.mask}` : " no ip address");
       (i.helper || []).forEach(h => L.push(" ip helper-address " + h));
+      if (i.aclIn) L.push(` ip access-group ${i.aclIn} in`);
+      if (i.aclOut) L.push(` ip access-group ${i.aclOut} out`);
+      if (i.nat) L.push(" ip nat " + i.nat);
+      if (i.ospfHello) L.push(" ip ospf hello-interval " + i.ospfHello);
+      if (i.ospfDead) L.push(" ip ospf dead-interval " + i.ospfDead);
+      if (i.ospfNet) L.push(" ip ospf network " + i.ospfNet);
+      if (i.ospfPri != null) L.push(" ip ospf priority " + i.ospfPri);
+      if (i.ospfCost) L.push(" ip ospf cost " + i.ospfCost);
+      if (i.ospfArea != null) L.push(` ip ospf ${i.ospfPid || 1} area ${i.ospfArea}`);
     }
     if (i.clock) L.push(" clock rate " + i.clock);
     if (!isVirtualIf(n) && portKind(n) === "eth") { if (i.duplex && i.duplex !== "auto") L.push(" duplex " + i.duplex); if (i.speed && i.speed !== "auto") L.push(" speed " + i.speed); }
     if (i.shutdown) L.push(" shutdown");
     L.push("!");
   }
+  if (c.ospf) L.push(...ospfConfig(c), "!");
   if (c.defaultGateway) L.push("ip default-gateway " + c.defaultGateway);
   if (isRouterish(d) || c.ipRouting) L.push("ip classless");
   c.routes.forEach(r => L.push(`ip route ${r.net} ${r.mask} ${r.nh || r.iface}${r.ad && r.ad !== 1 ? " " + r.ad : ""}`));
   L.push("!", "ip flow-export version 9", "!");
+  const nat = iosNatConfig(c), acl = iosAclConfig(c);
+  if (nat.length) L.push(...nat, "!");
+  if (acl.length) L.push(...acl, "!");
   if (c.banner) L.push(`banner motd ^C${c.banner}^C`, "!");
   const line = (name, o, extra) => {
     L.push(name);
@@ -147,7 +172,7 @@ function runningConfig(d, c) {
   };
   line("line con 0", c.lines.con);
   if (isRouterish(d)) L.push("line aux 0", "!");
-  line(isRouterish(d) ? "line vty 0 4" : "line vty 0 15", c.lines.vty, c.lines.vty.transport !== "all" ? [" transport input " + c.lines.vty.transport] : []);
+  line(isRouterish(d) ? "line vty 0 4" : "line vty 0 15", c.lines.vty, [...(c.lines.vty.accessClass ? [" access-class " + c.lines.vty.accessClass + " in"] : []), ...(c.lines.vty.transport !== "all" ? [" transport input " + c.lines.vty.transport] : [])]);
   L.push("!", "end");
   return L.join("\n");
 }
